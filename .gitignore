@@ -1,0 +1,18 @@
+# Bỏ qua thư mục môi trường ảo
+.venv/
+
+# Bỏ thư mục kết quả chạy
+runs/
+
+# Bỏ dataset lớn
+ultralytics/data/coco_dataset
+
+# Bỏ model checkpoints
+checkpoints/
+
+# Bỏ file hệ thống
+__pycache__/
+*.pyc
+*.pyo
+*.log
+*.DS_Store
