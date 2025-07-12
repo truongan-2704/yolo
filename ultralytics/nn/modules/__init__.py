@@ -39,6 +39,10 @@ from .CA import CoordAtt
 
 from .GAM import GAM
 
+from .LAE import LAE, MSFM
+
+from .IDC import InceptionDWConv2d, C3k2_IDC, Bottleneck_IDC
+
 from .block import (
     C1,
     C2,

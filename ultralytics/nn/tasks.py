@@ -65,7 +65,7 @@ from ultralytics.nn.modules import (
     WorldDetect,
     v10Detect,
     A2C2f,
-    EMA, SimAM, CBAM, MHSA, TripletAttention, ECA, ShuffleAttention, AKConv, Dynamic_conv2d, GAM, CoordAtt
+    EMA, SimAM, CBAM, MHSA, TripletAttention, ECA, ShuffleAttention, AKConv, Dynamic_conv2d, GAM, CoordAtt, InceptionDWConv2d, C3k2_IDC, LAE, MSFM
 )
 
 from ultralytics.nn.modules import (BiFPN_Concat, BiFPN, BiFPN_Transformer)
@@ -1043,6 +1043,8 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
                     args.append(True)
                     args.append(1.5)
         elif m is AIFI:
+            args = [ch[f], *args]
+        elif m is LAE:
             args = [ch[f], *args]
         elif m in {HGStem, HGBlock}:
             c1, cm, c2 = ch[f], args[0], args[1]
