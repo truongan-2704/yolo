@@ -39,6 +39,8 @@ from .CA import CoordAtt
 
 from .GAM import GAM
 
+from .SK import SKAttention
+
 from .LAE import LAE, MSFM
 
 from .IDC import InceptionDWConv2d, C3k2_IDC, Bottleneck_IDC
@@ -84,6 +86,7 @@ from .block import (
     SCDown,
     TorchVision,
     A2C2f,
+    A2C2f_SimAM
 )
 from .conv import (
     CBAM,
@@ -189,5 +192,6 @@ __all__ = (
     "PSA",
     "TorchVision",
     "Index",
-    "A2C2f"
+    "A2C2f",
+    "A2C2f_SimAM"
 )

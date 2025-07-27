@@ -65,7 +65,23 @@ from ultralytics.nn.modules import (
     WorldDetect,
     v10Detect,
     A2C2f,
-    EMA, SimAM, CBAM, MHSA, TripletAttention, ECA, ShuffleAttention, AKConv, Dynamic_conv2d, GAM, CoordAtt, InceptionDWConv2d, C3k2_IDC, LAE, MSFM
+    EMA,
+    SimAM,
+    CBAM,
+    MHSA,
+    TripletAttention,
+    ECA,
+    ShuffleAttention,
+    AKConv,
+    Dynamic_conv2d,
+    GAM, CoordAtt,
+    InceptionDWConv2d,
+    C3k2_IDC,
+    LAE,
+    MSFM,
+    A2C2f_SimAM,
+    UNetV2,
+    SKAttention
 )
 
 from ultralytics.nn.modules import (BiFPN_Concat, BiFPN, BiFPN_Transformer)
@@ -1002,7 +1018,9 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             C2fCIB,
             A2C2f,
             AKConv,
-            Dynamic_conv2d
+            Dynamic_conv2d,A2C2f_SimAM,
+            SKAttention
+
         }:
             c1, c2 = ch[f], args[0]
             if c2 != nc:  # if c2 not equal to number of classes (i.e. for Classify() output)
@@ -1030,6 +1048,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
                 C2fCIB,
                 C2PSA,
                 A2C2f,
+                A2C2f_SimAM,
             }:
                 args.insert(2, n)  # number of repeats
                 n = 1
@@ -1056,6 +1075,12 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             c2 = args[1] if args[3] else args[1] * 4
         elif m is nn.BatchNorm2d:
             args = [ch[f]]
+        elif m is SKAttention:
+            c1, c2 = ch[f], args[0]
+            if c2 != nc:  # if c2 not equal to number of classes (i.e. for Classify() output)
+                c2 = make_divisible(min(c2, max_channels) * width, 8)
+
+            args = [c1, c2, *args[1:]]
         elif m is Concat:
             c2 = sum(ch[x] for x in f)
         elif m is BiFPN_Concat:
