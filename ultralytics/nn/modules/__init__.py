@@ -86,7 +86,7 @@ from .block import (
     SCDown,
     TorchVision,
     A2C2f,
-    A2C2f_SimAM
+    A2C2f_SimAM,
 )
 from .conv import (
     CBAM,
@@ -193,5 +193,6 @@ __all__ = (
     "TorchVision",
     "Index",
     "A2C2f",
-    "A2C2f_SimAM"
+    "A2C2f_SimAM",
+    "LAE"
 )
