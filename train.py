@@ -8,7 +8,7 @@ if __name__ == '__main__':
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-AKConv.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-C3k2-IDC.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-SAHI-MHSA.yaml')
-    model = YOLO(r'ultralytics/cfg/models/11/yolo11-test-07.yaml')
+    model = YOLO(r'ultralytics/cfg/models/11/yolo11-test-08.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-IDC.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-DynamicConv2D.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-GAM.yaml')
