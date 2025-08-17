@@ -1,5 +1,5 @@
 # Ultralytics YOLO 🚀, AGPL-3.0 license
-# YOLO11 object detection model with P2-P5 + BiFPN (DeepPCB-MAX, PR-Boosted v2)
+# YOLO11 object detection model with P2-P5 + BiFPN (DeepPCB-MAX, PR-Boosted)
 
 # Parameters
 nc: 80
@@ -25,7 +25,7 @@ backbone:
   - [-1, 2, C3k2, [1024, True]]          # 8 - deeper P5
   - [-1, 1, SPPF, [1024, 5]]             # 9
   - [-1, 1, C2PSA, [1024]]               # 10 - P5 channel-context
-  - [-1, 1, MHSA, [2]]                   # 11 - P5 global att (was CoordAtt)
+  - [-1, 1, CoordAtt, []]                # 11 - P5 light att
 
 # ---------------------------
 # Head (BiFPN, ưu tiên P2/P3/P4)
@@ -34,7 +34,7 @@ head:
   # Projections -> 256
   - [4,  1, Conv, [256, 1, 1]]           # 12 <- P3
   - [6,  1, Conv, [256, 1, 1]]           # 13 <- P4
-  - [11, 1, Conv, [256, 1, 1]]           # 14 <- P5 (after MHSA)
+  - [11, 1, Conv, [256, 1, 1]]           # 14 <- P5 (sau CoordAtt)
   - [2,  1, Conv, [256, 1, 1]]           # 15 <- P2
 
   # Top-down: P5 -> P4
@@ -53,24 +53,24 @@ head:
   - [[-1, 15], 1, BiFPN, [256]]                 # 24
   - [-1, 4, C3k2, [128, False]]                 # 25  # P2' (repeats 4)
   - [-1, 1, TripletAttention, [128]]            # 26  # P2' att (mạnh tay)
-  - [-1, 1, ECA, [128]]                         # 27  # NEW: stabilize logits @P2' (lighter than CoordAtt)
+  - [-1, 1, CoordAtt, []]                       # 27  # NEW: ổn định logit P2' (↓FP, P↑)
 
   # Bottom-up: P2' -> P3
   - [-1, 1, Conv, [256, 3, 2]]                  # 28
   - [[-1, 12, 22], 1, BiFPN, [256]]             # 29  # fuse (P2↓, P3_proj, P3'(att))
-  - [-1, 5, C3k2, [256, False]]                 # 30  # P3_refined (↑R); set to 5 if you need speed
-  - [-1, 1, CBAM, []]                           # 31  # was CoordAtt (better R, P stays)
+  - [-1, 6, C3k2, [256, False]]                 # 30  # ↑ repeats 5 -> 6 (P3_refined, R↑)
+  - [-1, 1, CoordAtt, []]                       # 31  # P3_refined att (nhẹ, ổn định)
 
   # Bottom-up: P3_refined -> P4
   - [-1, 1, Conv, [256, 3, 2]]                  # 32
   - [[-1, 13, 18], 1, BiFPN, [256]]             # 33
-  - [-1, 5, C3k2, [512, False]]                 # 34  # P4_refined
-  - [-1, 1, CBAM, []]                           # 35  # was CoordAtt (reduce FN & FP mid-scale)
+  - [-1, 5, C3k2, [512, False]]                 # 34  # P4_refined (giữ 5)
+  - [-1, 1, CoordAtt, []]                       # 35  # P4_refined att (giảm FP)
 
   # Bottom-up: P4_refined -> P5
   - [-1, 1, Conv, [256, 3, 2]]                  # 36
   - [[-1, 14], 1, BiFPN, [256]]                 # 37
   - [-1, 3, C3k2, [1024, True]]                 # 38  # P5_refined
 
-  # Detect
+  # Detect (dùng feature sau att nơi cần)
   - [[27, 31, 35, 38], 1, Detect, [nc]]         # P2, P3, P4, P5
