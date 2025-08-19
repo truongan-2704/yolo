@@ -3,9 +3,9 @@ from ultralytics import YOLO
 
 if __name__ == '__main__':
 
-    # model = YOLO(r'ultralytics/cfg/models/11/yolo11-test-10.yaml')
+    model = YOLO(r'ultralytics/cfg/models/11/yolo11-test-11.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-p2-bifpn-mhsa.yaml')
-    model = YOLO(r'ultralytics/cfg/models/11/yolo11-bifpn.yaml')
+    # model = YOLO(r'ultralytics/cfg/models/11/yolo11-bifpn.yaml')
 
     model.train(
         data=r'data/coco_dataset/data.yaml',
