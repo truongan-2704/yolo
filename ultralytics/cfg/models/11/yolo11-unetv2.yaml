@@ -1,0 +1,42 @@
+# yolo11_pvtb1_pan.yaml  (Detection, P3-P5)
+# Dùng backbone PVTv2-B1, head kiểu YOLO11 (C2f + FPN/PAN + Detect)
+
+nc: 80
+scales:
+  n: [0.50, 0.25, 1024]
+  s: [0.50, 0.50, 1024]
+  m: [0.50, 1.00, 512]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.50, 512]
+
+backbone:
+  # Giả định module pvt_v2_b1 xuất 3 feature maps: P3≈128, P4≈320, P5≈512
+  - [-1, 1, pvt_v2_b1, []]      # -> nodes 0:P3, 1:P4, 2:P5
+
+  # Chuẩn hoá kênh về YOLO-friendly
+  - [0, 1, Conv,   [256, 1, 1]] # 3: P3->256
+  - [1, 1, Conv,   [512, 1, 1]] # 4: P4->512
+  - [2, 1, Conv,  [1024, 1, 1]] # 5: P5->1024
+  - [5, 1, SPPF,  [1024, 5]]    # 6: SPPF giúp ổn định trước khi upsample
+
+head:
+  # FPN (top-down)
+  - [6, 1, nn.Upsample, [None, 2, "nearest"]]  # 7
+  - [[-1, 4], 1, Concat, [1]]                  # 8  cat(P5↑, P4)
+  - [-1, 1, C2f, [512, 2, False]]              # 9  -> P4'
+
+  - [9, 1, nn.Upsample, [None, 2, "nearest"]]  # 10
+  - [[-1, 3], 1, Concat, [1]]                  # 11 cat(P4'↑, P3)
+  - [-1, 1, C2f, [256, 2, False]]              # 12 -> P3'
+
+  # PAN (bottom-up)
+  - [12, 1, Conv, [256, 3, 2]]                 # 13 down -> P4 scale
+  - [[-1, 9], 1, Concat, [1]]                  # 14 cat(down, P4')
+  - [-1, 1, C2f, [512, 2, False]]              # 15 -> P4''
+
+  - [15, 1, Conv, [512, 3, 2]]                 # 16 down -> P5 scale
+  - [[-1, 6], 1, Concat, [1]]                  # 17 cat(down, P5(SPPF))
+  - [-1, 1, C2f, [1024, 2, True]]              # 18 -> P5''
+
+  # Detect(P3, P4, P5)
+  - [[12, 15, 18], 1, Detect, [nc]]
