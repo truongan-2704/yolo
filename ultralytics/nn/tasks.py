@@ -81,7 +81,7 @@ from ultralytics.nn.modules import (
     MSFM,
     A2C2f_SimAM,
     UNetV2,
-    SKAttention
+    SKAttention, SHSA
 )
 
 from ultralytics.nn.modules import (BiFPN_Concat, BiFPN, BiFPN_Transformer)
@@ -1088,7 +1088,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
         elif m in {BiFPN, BiFPN_Transformer}:
             length = len([ch[x] for x in f])
             args = [length]
-        elif m in {MHSA, ShuffleAttention}:
+        elif m in {MHSA, ShuffleAttention, SHSA}:
             args = [ch[f], *args]
         elif m in {GAM, CoordAtt}:
             c2 = ch[f]

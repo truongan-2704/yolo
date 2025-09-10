@@ -3,8 +3,8 @@ from ultralytics import YOLO
 
 if __name__ == '__main__':
 
-    # model = YOLO(r'ultralytics/cfg/models/11/yolo11-test-11.yaml')
-    model = YOLO(r'ultralytics/cfg/models/11/yolo11-unetv2.yaml')
+    model = YOLO(r'ultralytics/cfg/models/11/yolo11-SHSA.yaml')
+    # model = YOLO(r'ultralytics/cfg/models/11/yolo11-unetv2.yaml')
     # model = YOLO(r'ultralytics/cfg/models/v12/yolov12-bifpn-ca-02.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-p2-bifpn-mhsa.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-bifpn.yaml')
