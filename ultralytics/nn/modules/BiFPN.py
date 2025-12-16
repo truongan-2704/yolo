@@ -55,25 +55,64 @@ class BiFPN_Concat(nn.Module):
         return x
 
 
-
-class swish(nn.Module):
-    def forward(self, x):
-        return x * torch.sigmoid(x)
-
+# class swish(nn.Module):
+#     def forward(self, x):
+#         return x * torch.sigmoid(x)
+#
+#
+# class BiFPN(nn.Module):
+#     def __init__(self, length):
+#         super().__init__()
+#         self.weight = nn.Parameter(torch.ones(length, dtype=torch.float32), requires_grad=True)
+#         self.swish = swish()
+#         self.epsilon = 0.0001
+#
+#     def forward(self, x):
+#         weights = self.weight / (torch.sum(self.swish(self.weight), dim=0) + self.epsilon)
+#         weighted_feature_maps = [weights[i] * x[i] for i in range(len(x))]
+#         stacked_feature_maps = torch.stack(weighted_feature_maps, dim=0)
+#         result = torch.sum(stacked_feature_maps, dim=0)
+#         return result
+#
+#
+# import torch
+# import torch.nn as nn
 
 class BiFPN(nn.Module):
-    def __init__(self, length):
+    def __init__(self, ch, c2):
+        # ch: list số kênh đầu vào (VD: [1024, 512])
+        # c2: số kênh đầu ra mong muốn (VD: 512)
         super().__init__()
-        self.weight = nn.Parameter(torch.ones(length, dtype=torch.float32), requires_grad=True)
-        self.swish = swish()
-        self.epsilon = 0.0001
+
+        # Trọng số học được cho việc trộn đặc trưng
+        self.w = nn.Parameter(torch.ones(len(ch), dtype=torch.float32), requires_grad=True)
+        self.epsilon = 1e-4
+
+        # --- QUAN TRỌNG: Tạo Conv1x1 để ép tất cả đầu vào về cùng kích thước c2 ---
+        self.convs = nn.ModuleList()
+        for c_in in ch:
+            if c_in != c2:
+                # Nếu kênh khác nhau -> Dùng Conv 1x1 để đổi kênh
+                self.convs.append(nn.Conv2d(c_in, c2, 1, stride=1, padding=0))
+            else:
+                # Nếu kênh giống nhau -> Giữ nguyên (Tiết kiệm tính toán)
+                self.convs.append(nn.Identity())
+
+        self.act = nn.SiLU()  # Hoặc dùng Swish như bạn muốn
 
     def forward(self, x):
-        weights = self.weight / (torch.sum(self.swish(self.weight), dim=0) + self.epsilon)
-        weighted_feature_maps = [weights[i] * x[i] for i in range(len(x))]
-        stacked_feature_maps = torch.stack(weighted_feature_maps, dim=0)
-        result = torch.sum(stacked_feature_maps, dim=0)
-        return result
+        # x là list các tensor [x1, x2, ...]
+        # 1. Chuẩn hóa trọng số (Fast normalized fusion)
+        w = self.w
+        weight = w / (torch.sum(w, dim=0) + self.epsilon)
+        # 2. Xử lý từng đầu vào: Đổi kênh (nếu cần) -> Nhân trọng số -> Cộng dồn
+        # Chúng ta cộng trực tiếp (sum) thay vì stack để tiết kiệm bộ nhớ và tránh lỗi
+        out = 0
+        for i in range(len(x)):
+            # self.convs[i](x[i]) đảm bảo tensor luôn có số kênh là c2
+            out += weight[i] * self.convs[i](x[i])
+
+        return self.act(out)
 
 
 class MultiHeadSelfAttention(nn.Module):

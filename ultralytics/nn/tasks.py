@@ -1085,9 +1085,21 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             c2 = sum(ch[x] for x in f)
         elif m is BiFPN_Concat:
             c2 = max(ch[x] for x in f)
-        elif m in {BiFPN, BiFPN_Transformer}:
-            length = len([ch[x] for x in f])
-            args = [length]
+        # elif m in {BiFPN, BiFPN_Transformer}:
+        #     length = len([ch[x] for x in f])
+        #     args = [length]
+            # === THÊM ĐOẠN NÀY ===
+        elif m is BiFPN:
+            # 1. Lấy width_gain từ config dictionary 'd'
+            width_gain = d.get('width_multiple', 1.0)
+            # 2. Tính số kênh đầu ra (c2) đã scale theo width_gain
+            # args[0] là số kênh gốc trong YAML (ví dụ 256)
+            c2 = make_divisible(args[0] * width_gain, 8)
+            # 3. Gom các kênh đầu vào
+            c1 = [ch[x] for x in f]
+            # 4. Đóng gói lại args
+            args = [c1, c2]
+        # =====================
         elif m in {MHSA, ShuffleAttention, SHSA}:
             args = [ch[f], *args]
         elif m in {GAM, CoordAtt}:

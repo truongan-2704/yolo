@@ -1,5 +1,5 @@
 # Ultralytics YOLO 🚀, AGPL-3.0
-# YOLO11 backbone + P2 fuse (no P2 detect) + BiFPN + EMA@P3/P2/P3ref/P4ref + EMA@P5
+# YOLO12 Optimized: Removed redundant projections, Balanced repeats.
 
 # Parameters
 nc: 80
@@ -11,8 +11,9 @@ scales:
   x: [1.00, 1.50, 512]
 
 # ---------------------------
-# Backbone (YOLO11 + EMA@P5)
+# Backbone (YOLO11/12 logic + CA)
 # ---------------------------
+
 backbone:
   - [-1, 1, Conv, [64, 3, 2]]             # 0 - P1/2
   - [-1, 1, Conv, [128, 3, 2]]            # 1 - P2/4
@@ -25,51 +26,56 @@ backbone:
   - [-1, 2, C3k2, [1024, True]]           # 8 - P5 deep
   - [-1, 1, SPPF, [1024, 5]]              # 9
   - [-1, 1, C2PSA, [1024]]                # 10
-  - [-1, 1, EMA, [1024, 8]]               # 11  (P5 attention: MHSA -> EMA)
+  - [-1, 1, CoordAtt, []]                 # 11 <--- Backbone P5 (Output P5)
 
 # ---------------------------
-# Head (BiFPN, P2 fuse; Detect P3-P5)
+# Head (BiFPN Optimized)
 # ---------------------------
 head:
-  # Projections -> 256
-  - [4,  1, Conv, [256, 1, 1]]            # 12 <- P3
-  - [6,  1, Conv, [256, 1, 1]]            # 13 <- P4
-  - [11, 1, Conv, [256, 1, 1]]            # 14 <- P5 (sau C2PSA+EMA)
-  - [2,  1, Conv, [256, 1, 1]]            # 15 <- P2
+  # === Top-down (FPN) ===
 
-  # Top-down: P5 -> P4
-  - [14, 1, nn.Upsample, [None, 2, "nearest"]]   # 16
-  - [[-1, 13], 1, BiFPN, [256]]                  # 17
-  - [-1, 2, C3k2, [256, False]]                  # 18  # P4'
+  # P5 -> P4
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 12
+  # BiFPN nối trực tiếp với Backbone P4 (Layer 6)
+  # Code Python sẽ tự Scale: 256*0.25=64. Input Layer 6 cũng 64 -> Khớp!
+  - [[-1, 6], 1, BiFPN, [256]]                   # 13
+  - [-1, 2, C3k2, [256, False]]                  # 14 (P4')
 
-  # Top-down: P4' -> P3
+  # P4' -> P3
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 15
+  # BiFPN nối trực tiếp với Backbone P3 (Layer 4)
+  - [[-1, 4], 1, BiFPN, [256]]                   # 16
+  - [-1, 2, C3k2, [256, False]]                  # 17 (P3')
+  - [-1, 1, CoordAtt, []]                        # 18 (P3' Att)
+
+  # P3' -> P2 (Vòng lặp Fuse P2)
   - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 19
-  - [[-1, 12], 1, BiFPN, [256]]                  # 20
-  - [-1, 3, C3k2, [256, False]]                  # 21  # P3'
-  - [-1, 1, EMA, [256, 8]]                       # 22  # P3' att
+  # BiFPN nối trực tiếp với Backbone P2 (Layer 2)
+  - [[-1, 2], 1, BiFPN, [256]]                   # 20
+  - [-1, 2, C3k2, [128, False]]                  # 21 (P2')
+  - [-1, 1, CoordAtt, []]                        # 22 (P2' Att)
 
-  # Top-down: P3'(att) -> P2 (FUSE CHỈ, KHÔNG DETECT)
-  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 23
-  - [[-1, 15], 1, BiFPN, [256]]                  # 24
-  - [-1, 3, C3k2, [128, False]]                  # 25  # P2'
-  - [-1, 1, EMA, [128, 8]]                       # 26  # P2' att
+  # === Bottom-up (BiFPN 3 Inputs) ===
 
-  # Bottom-up: P2' -> P3
+  # P2' -> P3
+  - [-1, 1, Conv, [256, 3, 2]]                   # 23 (Downsample)
+  # Fuse: [P2_lên, P3_gốc(4), P3_xuống(18)]
+  - [[-1, 4, 18], 1, BiFPN, [256]]               # 24
+  - [-1, 3, C3k2, [256, False]]                  # 25 (P3_refined)
+  - [-1, 1, CoordAtt, []]                        # 26 -> Output P3
+
+  # P3 -> P4
   - [-1, 1, Conv, [256, 3, 2]]                   # 27
-  - [[-1, 12, 22], 1, BiFPN, [256]]              # 28  (P2↓, P3_proj, P3 att)
-  - [-1, 5, C3k2, [256, False]]                  # 29  P3_refined
-  - [-1, 1, EMA, [256, 8]]                       # 30  P3_refined att
+  # Fuse: [P3_lên, P4_gốc(6), P4_xuống(14)]
+  - [[-1, 6, 14], 1, BiFPN, [256]]               # 28
+  - [-1, 3, C3k2, [512, False]]                  # 29 (P4_refined)
+  - [-1, 1, CoordAtt, []]                        # 30 -> Output P4
 
-  # Bottom-up: P3_refined -> P4
+  # P4 -> P5
   - [-1, 1, Conv, [256, 3, 2]]                   # 31
-  - [[-1, 13, 18], 1, BiFPN, [256]]              # 32
-  - [-1, 4, C3k2, [512, False]]                  # 33  P4_refined
-  - [-1, 1, EMA, [512, 8]]                       # 34  P4_refined att
+  # Fuse: [P4_lên, Backbone P5(11)]
+  - [[-1, 11], 1, BiFPN, [256]]                  # 32
+  - [-1, 2, C3k2, [1024, True]]                  # 33 (P5_refined)
 
-  # Bottom-up: P4_refined -> P5
-  - [-1, 1, Conv, [256, 3, 2]]                   # 35
-  - [[-1, 14], 1, BiFPN, [256]]                  # 36
-  - [-1, 2, C3k2, [1024, True]]                  # 37  P5_refined
-
-  # Detect: P3, P4, P5
-  - [[30, 34, 37], 1, Detect, [nc]]              # 38
+  # Detect Standard (P3, P4, P5)
+  - [[26, 30, 33], 1, Detect, [nc]]
