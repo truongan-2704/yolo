@@ -78,42 +78,72 @@ class BiFPN_Concat(nn.Module):
 # import torch
 # import torch.nn as nn
 
+# class BiFPN(nn.Module):
+#     def __init__(self, ch, c2):
+#         # ch: list số kênh đầu vào (VD: [1024, 512])
+#         # c2: số kênh đầu ra mong muốn (VD: 512)
+#         super().__init__()
+#
+#         # Trọng số học được cho việc trộn đặc trưng
+#         self.w = nn.Parameter(torch.ones(len(ch), dtype=torch.float32), requires_grad=True)
+#         self.epsilon = 1e-4
+#
+#         # --- QUAN TRỌNG: Tạo Conv1x1 để ép tất cả đầu vào về cùng kích thước c2 ---
+#         self.convs = nn.ModuleList()
+#         for c_in in ch:
+#             if c_in != c2:
+#                 # Nếu kênh khác nhau -> Dùng Conv 1x1 để đổi kênh
+#                 self.convs.append(nn.Conv2d(c_in, c2, 1, stride=1, padding=0))
+#             else:
+#                 # Nếu kênh giống nhau -> Giữ nguyên (Tiết kiệm tính toán)
+#                 self.convs.append(nn.Identity())
+#
+#         self.act = nn.SiLU()  # Hoặc dùng Swish như bạn muốn
+#
+#     def forward(self, x):
+#         # x là list các tensor [x1, x2, ...]
+#         # 1. Chuẩn hóa trọng số (Fast normalized fusion)
+#         w = self.w
+#         weight = w / (torch.sum(w, dim=0) + self.epsilon)
+#         # 2. Xử lý từng đầu vào: Đổi kênh (nếu cần) -> Nhân trọng số -> Cộng dồn
+#         # Chúng ta cộng trực tiếp (sum) thay vì stack để tiết kiệm bộ nhớ và tránh lỗi
+#         out = 0
+#         for i in range(len(x)):
+#             # self.convs[i](x[i]) đảm bảo tensor luôn có số kênh là c2
+#             out += weight[i] * self.convs[i](x[i])
+#
+#         return self.act(out)
+
+
 class BiFPN(nn.Module):
     def __init__(self, ch, c2):
-        # ch: list số kênh đầu vào (VD: [1024, 512])
-        # c2: số kênh đầu ra mong muốn (VD: 512)
+        # ch: list số kênh đầu vào
+        # c2: số kênh đầu ra mong muốn
         super().__init__()
 
-        # Trọng số học được cho việc trộn đặc trưng
         self.w = nn.Parameter(torch.ones(len(ch), dtype=torch.float32), requires_grad=True)
         self.epsilon = 1e-4
 
-        # --- QUAN TRỌNG: Tạo Conv1x1 để ép tất cả đầu vào về cùng kích thước c2 ---
+        # --- ACTIVE MODE: LUÔN DÙNG CONV ĐỂ HỌC ---
+        # Không dùng Identity nữa để đảm bảo mAP cao nhất
         self.convs = nn.ModuleList()
         for c_in in ch:
-            if c_in != c2:
-                # Nếu kênh khác nhau -> Dùng Conv 1x1 để đổi kênh
-                self.convs.append(nn.Conv2d(c_in, c2, 1, stride=1, padding=0))
-            else:
-                # Nếu kênh giống nhau -> Giữ nguyên (Tiết kiệm tính toán)
-                self.convs.append(nn.Identity())
+            self.convs.append(nn.Conv2d(c_in, c2, 1, stride=1, padding=0))
 
-        self.act = nn.SiLU()  # Hoặc dùng Swish như bạn muốn
+        self.act = nn.SiLU()
 
     def forward(self, x):
-        # x là list các tensor [x1, x2, ...]
-        # 1. Chuẩn hóa trọng số (Fast normalized fusion)
+        # 1. Trọng số
         w = self.w
         weight = w / (torch.sum(w, dim=0) + self.epsilon)
-        # 2. Xử lý từng đầu vào: Đổi kênh (nếu cần) -> Nhân trọng số -> Cộng dồn
-        # Chúng ta cộng trực tiếp (sum) thay vì stack để tiết kiệm bộ nhớ và tránh lỗi
+
+        # 2. Tính toán
         out = 0
         for i in range(len(x)):
-            # self.convs[i](x[i]) đảm bảo tensor luôn có số kênh là c2
+            # Luôn đi qua Conv để biến đổi đặc trưng trước khi cộng
             out += weight[i] * self.convs[i](x[i])
 
         return self.act(out)
-
 
 class MultiHeadSelfAttention(nn.Module):
     def __init__(self, embed_dim, num_heads):

@@ -1,0 +1,65 @@
+# Ultralytics YOLO 🚀, AGPL-3.0
+# YOLO12 POWER: Clean Structure + Heavy Backbone (High mAP version)
+
+# Parameters
+nc: 80
+scales:
+  n: [0.50, 0.25, 1024]
+  s: [0.50, 0.50, 1024]
+  m: [0.50, 1.00, 512]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.50, 512]
+
+# Backbone (Giữ nguyên)
+backbone:
+  - [-1, 1, Conv, [64, 3, 2]]             # 0
+  - [-1, 1, Conv, [128, 3, 2]]            # 1
+  - [-1, 2, C3k2, [256, False, 0.25]]     # 2
+  - [-1, 1, Conv, [256, 3, 2]]            # 3
+  - [-1, 2, C3k2, [512, False, 0.25]]     # 4
+  - [-1, 1, Conv, [512, 3, 2]]            # 5
+  - [-1, 2, C3k2, [512, True]]            # 6
+  - [-1, 1, Conv, [1024, 3, 2]]           # 7
+  - [-1, 2, C3k2, [1024, True]]           # 8
+  - [-1, 1, SPPF, [1024, 5]]              # 9
+  - [-1, 1, C2PSA, [1024]]                # 10
+  - [-1, 1, CoordAtt, []]                 # 11
+
+# Head (BiFPN Optimized - High Capacity)
+head:
+  # === Top-down ===
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 12
+  - [[-1, 6], 1, BiFPN, [256]]                   # 13
+  - [-1, 2, C3k2, [256, False]]                  # 14
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 15
+  - [[-1, 4], 1, BiFPN, [256]]                   # 16
+  - [-1, 2, C3k2, [256, False]]                  # 17
+  - [-1, 1, CoordAtt, []]                        # 18
+
+  # P2 Loop
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 19
+  - [[-1, 2], 1, BiFPN, [256]]                   # 20
+  - [-1, 3, C3k2, [128, False]]                  # 21 <--- Tăng repeats lên 3 (giống cũ)
+  - [-1, 1, CoordAtt, []]                        # 22
+
+  # === Bottom-up (Tăng Repeats để gánh mAP) ===
+
+  # P3 Output
+  - [-1, 1, Conv, [256, 3, 2]]                   # 23
+  - [[-1, 4, 18], 1, BiFPN, [256]]               # 24
+  - [-1, 4, C3k2, [256, False]]                  # 25 <--- Tăng repeats lên 4 (Gần bằng mức 5 cũ)
+  - [-1, 1, CoordAtt, []]                        # 26
+
+  # P4 Output
+  - [-1, 1, Conv, [256, 3, 2]]                   # 27
+  - [[-1, 6, 14], 1, BiFPN, [256]]               # 28
+  - [-1, 4, C3k2, [512, False]]                  # 29 <--- Tăng repeats lên 4 (Bằng mức 4 cũ)
+  - [-1, 1, CoordAtt, []]                        # 30
+
+  # P5 Output
+  - [-1, 1, Conv, [256, 3, 2]]                   # 31
+  - [[-1, 11], 1, BiFPN, [256]]                  # 32
+  - [-1, 2, C3k2, [1024, True]]                  # 33
+
+  - [[26, 30, 33], 1, Detect, [nc]]

@@ -1090,16 +1090,11 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
         #     args = [length]
             # === THÊM ĐOẠN NÀY ===
         elif m is BiFPN:
-            # 1. Lấy width_gain từ config dictionary 'd'
+            # Vẫn cần cái này để tính toán c2 cho đúng (ví dụ Nano là 64)
             width_gain = d.get('width_multiple', 1.0)
-            # 2. Tính số kênh đầu ra (c2) đã scale theo width_gain
-            # args[0] là số kênh gốc trong YAML (ví dụ 256)
             c2 = make_divisible(args[0] * width_gain, 8)
-            # 3. Gom các kênh đầu vào
             c1 = [ch[x] for x in f]
-            # 4. Đóng gói lại args
             args = [c1, c2]
-        # =====================
         elif m in {MHSA, ShuffleAttention, SHSA}:
             args = [ch[f], *args]
         elif m in {GAM, CoordAtt}:
