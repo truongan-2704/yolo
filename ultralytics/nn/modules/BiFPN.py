@@ -1,14 +1,10 @@
-
-import math
-import warnings
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ultralytics.nn.modules.conv import Conv
 from torchvision.models.resnet import resnet50
 
 __all__ = ["BiFPN_Concat", "BiFPN"]
-
 
 def autopad(k, p=None, d=1):
     if d > 1:
@@ -114,6 +110,36 @@ class BiFPN_Concat(nn.Module):
 #
 #         return self.act(out)
 
+#
+# class BiFPN(nn.Module):
+#     def __init__(self, ch, c2):
+#         # ch: list số kênh đầu vào
+#         # c2: số kênh đầu ra mong muốn
+#         super().__init__()
+#
+#         self.w = nn.Parameter(torch.ones(len(ch), dtype=torch.float32), requires_grad=True)
+#         self.epsilon = 1e-4
+#
+#         # --- ACTIVE MODE: LUÔN DÙNG CONV ĐỂ HỌC ---
+#         # Không dùng Identity nữa để đảm bảo mAP cao nhất
+#         self.convs = nn.ModuleList()
+#         for c_in in ch:
+#             self.convs.append(nn.Conv2d(c_in, c2, 1, stride=1, padding=0))
+#
+#         self.act = nn.SiLU()
+#
+#     def forward(self, x):
+#         # 1. Trọng số
+#         w = self.w
+#         weight = w / (torch.sum(w, dim=0) + self.epsilon)
+#
+#         # 2. Tính toán
+#         out = 0
+#         for i in range(len(x)):
+#             # Luôn đi qua Conv để biến đổi đặc trưng trước khi cộng
+#             out += weight[i] * self.convs[i](x[i])
+#
+#         return self.act(out)
 
 class BiFPN(nn.Module):
     def __init__(self, ch, c2):
@@ -124,23 +150,25 @@ class BiFPN(nn.Module):
         self.w = nn.Parameter(torch.ones(len(ch), dtype=torch.float32), requires_grad=True)
         self.epsilon = 1e-4
 
-        # --- ACTIVE MODE: LUÔN DÙNG CONV ĐỂ HỌC ---
-        # Không dùng Identity nữa để đảm bảo mAP cao nhất
+        # --- SỬA CHỮA QUAN TRỌNG ---
+        # Thay nn.Conv2d bằng Conv của Ultralytics (Có Batch Normalization + SiLU)
         self.convs = nn.ModuleList()
         for c_in in ch:
-            self.convs.append(nn.Conv2d(c_in, c2, 1, stride=1, padding=0))
+            # Conv(input, output, kernel, stride)
+            # act=True (Mặc định) nghĩa là có SiLU
+            self.convs.append(Conv(c_in, c2, 1, 1))
 
         self.act = nn.SiLU()
 
     def forward(self, x):
-        # 1. Trọng số
+        # 1. Trọng số (Fast Normalized Fusion)
         w = self.w
         weight = w / (torch.sum(w, dim=0) + self.epsilon)
 
         # 2. Tính toán
         out = 0
         for i in range(len(x)):
-            # Luôn đi qua Conv để biến đổi đặc trưng trước khi cộng
+            # Bây giờ self.convs[i] đã có BatchNorm, mạng sẽ học tốt hơn nhiều
             out += weight[i] * self.convs[i](x[i])
 
         return self.act(out)
