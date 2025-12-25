@@ -1,6 +1,6 @@
 # Ultralytics YOLO 🚀, AGPL-3.0
-# YOLO12 POWER: Heavy Backbone + BiFPN
-# Attention: TripletAttention (Backbone) + CoordAtt (Head)
+# YOLO11 POWER: Heavy Backbone + BiFPN
+# Attention: TripletAttention (Backbone) + CoordAtt (Head, NO CA at P2)
 
 nc: 80   # BCCD = 3 nếu cần
 
@@ -12,7 +12,7 @@ scales:
   x: [1.00, 1.50, 512]
 
 # =========================
-# Backbone (ADD TripletAttention)
+# Backbone (TripletAttention)
 # =========================
 backbone:
   - [-1, 1, Conv, [64, 3, 2]]             # 0
@@ -27,7 +27,7 @@ backbone:
   - [-1, 1, SPPF, [1024, 5]]              # 9
   - [-1, 1, C2PSA, [1024]]                # 10
 
-  # 🔥 TripletAttention – ONLY HERE – NO ARGS
+  # 🔥 TripletAttention (NO ARGS)
   - [-1, 1, TripletAttention, [1024]]         # 11
 
 # =========================
@@ -42,31 +42,31 @@ head:
   - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 15
   - [[-1, 4], 1, BiFPN, [256]]                   # 16
   - [-1, 2, C3k2, [256, False]]                  # 17
-  - [-1, 1, CoordAtt, []]                        # 18
+  - [-1, 1, CoordAtt, []]                        # 18  ✅ P3
 
-  # === P2 Loop ===
+  # === P2 Loop (NO CoordAtt) ===
   - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 19
   - [[-1, 2], 1, BiFPN, [256]]                   # 20
   - [-1, 3, C3k2, [128, False]]                  # 21
-  - [-1, 1, CoordAtt, []]                        # 22
+  # ❌ KHÔNG CoordAtt tại P2
 
-  # === Bottom-up ===`
+  # === Bottom-up ===
   # P3
-  - [-1, 1, Conv, [256, 3, 2]]                   # 23
-  - [[-1, 4, 18], 1, BiFPN, [256]]               # 24
-  - [-1, 4, C3k2, [256, False]]                  # 25
-  - [-1, 1, CoordAtt, []]                        # 26
+  - [-1, 1, Conv, [256, 3, 2]]                   # 22
+  - [[-1, 4, 18], 1, BiFPN, [256]]               # 23
+  - [-1, 4, C3k2, [256, False]]                  # 24
+  - [-1, 1, CoordAtt, []]                        # 25  ✅ P3 refined
 
   # P4
-  - [-1, 1, Conv, [256, 3, 2]]                   # 27
-  - [[-1, 6, 14], 1, BiFPN, [256]]               # 28
-  - [-1, 4, C3k2, [512, False]]                  # 29
-  - [-1, 1, CoordAtt, []]                        # 30
+  - [-1, 1, Conv, [256, 3, 2]]                   # 26
+  - [[-1, 6, 14], 1, BiFPN, [256]]               # 27
+  - [-1, 4, C3k2, [512, False]]                  # 28
+  - [-1, 1, CoordAtt, []]                        # 29  ✅ P4
 
   # P5
-  - [-1, 1, Conv, [256, 3, 2]]                   # 31
-  - [[-1, 11], 1, BiFPN, [256]]                  # 32
-  - [-1, 2, C3k2, [1024, True]]                  # 33
+  - [-1, 1, Conv, [256, 3, 2]]                   # 30
+  - [[-1, 11], 1, BiFPN, [256]]                  # 31
+  - [-1, 2, C3k2, [1024, True]]                  # 32
 
   # Detect
-  - [[26, 30, 33], 1, Detect, [nc]]
+  - [[25, 29, 32], 1, Detect, [nc]]
