@@ -1,0 +1,75 @@
+# Ultralytics YOLO 🚀, AGPL-3.0
+# YOLO12 POWER: Heavy Backbone + BiFPN (Removed C2PSA)
+# Attention: TripletAttention (Backbone) + CoordAtt (Head)
+
+nc: 80
+scales:
+  n: [0.50, 0.25, 1024]
+  s: [0.50, 0.50, 1024]
+  m: [0.50, 1.00, 512]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.50, 512]
+
+# =========================
+# Backbone (C2PSA REMOVED)
+# =========================
+backbone:
+  - [-1, 1, Conv, [64, 3, 2]]             # 0
+  - [-1, 1, Conv, [128, 3, 2]]            # 1
+  - [-1, 2, C3k2, [256, False, 0.25]]     # 2
+  - [-1, 1, Conv, [256, 3, 2]]            # 3
+  - [-1, 2, C3k2, [512, False, 0.25]]     # 4
+  - [-1, 1, Conv, [512, 3, 2]]            # 5
+  - [-1, 2, C3k2, [512, True]]            # 6
+  - [-1, 1, Conv, [1024, 3, 2]]           # 7
+  - [-1, 2, C3k2, [1024, True]]           # 8
+  - [-1, 1, SPPF, [1024, 5]]              # 9
+
+  # 🔥 TripletAttention (Đẩy lên vị trí 10 thay cho C2PSA)
+  - [-1, 1, TripletAttention, [1024]]     # 10
+
+# =========================
+# Head (BiFPN + CoordAtt)
+# =========================
+head:
+  # === Top-down ===
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 11
+  - [[-1, 6], 1, BiFPN, [256]]                   # 12 (P4)
+  - [-1, 2, C3k2, [256, False]]                  # 13
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 14
+  - [[-1, 4], 1, BiFPN, [256]]                   # 15 (P3)
+  - [-1, 2, C3k2, [256, False]]                  # 16
+  - [-1, 1, CoordAtt, []]                        # 17
+
+  # === P2 Loop (Giữ nguyên theo yêu cầu của bạn) ===
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 18
+  - [[-1, 2], 1, BiFPN, [256]]                   # 19 (P2)
+  - [-1, 3, C3k2, [128, False]]                  # 20
+  - [-1, 1, CoordAtt, []]                        # 21
+
+  # === Bottom-up ===
+  # P3
+  - [-1, 1, Conv, [256, 3, 2]]                   # 22
+  # Input updated: [-1, 4, 17] (Do layer 18 cũ giờ là 17)
+  - [[-1, 4, 17], 1, BiFPN, [256]]               # 23
+  - [-1, 4, C3k2, [256, False]]                  # 24
+  - [-1, 1, CoordAtt, []]                        # 25 -> Detect P3
+
+  # P4
+  - [-1, 1, Conv, [256, 3, 2]]                   # 26
+  # Input updated: [-1, 6, 13] (Do layer 14 cũ giờ là 13)
+  - [[-1, 6, 13], 1, BiFPN, [256]]               # 27
+  - [-1, 4, C3k2, [512, False]]                  # 28
+  - [-1, 1, CoordAtt, []]                        # 29 -> Detect P4
+
+  # P5
+  - [-1, 1, Conv, [256, 3, 2]]                   # 30
+  # Input updated: [-1, 10] (Do Triplet giờ nằm ở layer 10)
+  - [[-1, 10], 1, BiFPN, [512]]                  # 31
+  # Lưu ý: BiFPN ở layer 31 mình để 512 để tránh thắt cổ chai từ Backbone 1024
+  - [-1, 2, C3k2, [1024, True]]                  # 32 -> Detect P5
+
+  # Detect
+  # Updated layers: 25 (P3), 29 (P4), 32 (P5)
+  - [[25, 29, 32], 1, Detect, [nc]]

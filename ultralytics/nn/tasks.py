@@ -1102,10 +1102,26 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
         elif m in {EMA}:
             args = [ch[f]]
         elif m in (SimAM, CBAM, TripletAttention, ECA):
-            c1, c2 = ch[f], args[0]
-            if c2 != nc:
-                c2 = make_divisible(min(c2, max_channels) * width, divisor=8)
-            args = [c1, *args[1:]]
+            c1 = ch[f]
+            # KIỂM TRA: Nếu args rỗng [] hoặc phần tử đầu không phải số nguyên (channel)
+            if len(args) == 0 or not isinstance(args[0], int):
+                c2 = c1  # TỰ ĐỘNG: Gán Output Channel = Input Channel
+
+                # Nếu là các module cần c1 như CBAM/ECA thì chèn c1 vào
+                # TripletAttention của bạn không cần c1 nên giữ nguyên args
+                if m is not TripletAttention:
+                    args = [c1, *args]
+            else:
+                # TRƯỜNG HỢP CŨ: Người dùng có điền channel trong YAML (ví dụ [512])
+                c2 = args[0]
+                if c2 != nc:
+                    c2 = make_divisible(min(c2, max_channels) * width, divisor=8)
+
+                # Xử lý args truyền vào Class
+                if m is TripletAttention:
+                    args = args[1:]  # Bỏ số 512 đi vì Class không nhận
+                else:
+                    args = [c1, *args[1:]]  # Các module khác cần c1
         elif m in {Detect, WorldDetect, Segment, Pose, OBB, ImagePoolingAttn, v10Detect}:
             args.append([ch[x] for x in f])
             if m is Segment:
