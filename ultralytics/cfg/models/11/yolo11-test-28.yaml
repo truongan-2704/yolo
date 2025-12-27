@@ -26,7 +26,7 @@ backbone:
   - [-1, 1, SPPF, [1024, 5]]              # 9
 
   # 🔥 TripletAttention (Đẩy lên vị trí 10 thay cho C2PSA)
-  - [-1, 1, TripletAttention, [1024]]     # 10
+  - [-1, 1, TripletAttention, []]     # 10
 
 # =========================
 # Head (BiFPN + CoordAtt)
@@ -54,7 +54,7 @@ head:
   # Input updated: [-1, 4, 17] (Do layer 18 cũ giờ là 17)
   - [[-1, 4, 17], 1, BiFPN, [256]]               # 23
   - [-1, 4, C3k2, [256, False]]                  # 24
-  - [-1, 1, CoordAtt, []]                        # 25 -> Detect P3
+  - [-1, 1, CoordAtt, []]                        # 25 -> Detect P3a
 
   # P4
   - [-1, 1, Conv, [256, 3, 2]]                   # 26

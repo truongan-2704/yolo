@@ -1,0 +1,53 @@
+# YOLOv12 🚀, AGPL-3.0 license
+# YOLOv12-turbo Slim-BiFPN (Optimized for Params)
+
+# Parameters
+nc: 80
+scales:
+  n: [0.50, 0.25, 1024]
+  s: [0.50, 0.50, 1024]
+  m: [0.50, 1.00, 512]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.50, 512]
+
+# Backbone (Giữ nguyên)
+backbone:
+  - [-1, 1, Conv,  [64, 3, 2]]
+  - [-1, 1, Conv,  [128, 3, 2, 1, 2]]
+  - [-1, 2, C3k2,  [256, False, 0.25]]
+  - [-1, 1, Conv,  [256, 3, 2, 1, 4]]
+  - [-1, 2, C3k2,  [512, False, 0.25]]
+  - [-1, 1, Conv,  [512, 3, 2]]
+  - [-1, 4, A2C2f, [512, True, 4]]
+  - [-1, 1, Conv,  [1024, 3, 2]]
+  - [-1, 4, A2C2f, [1024, True, 1]]
+
+# Head (Slim BiFPN)
+head:
+  # === Top-down ===
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  # GIẢM KÊNH: 512 -> 256
+  - [[-1, 6], 1, BiFPN, [256]]                   # 10 (P4)
+  - [-1, 2, A2C2f, [256, False, -1]]             # 11
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  # GIẢM KÊNH: 256 -> 128 (hoặc giữ 256 nếu muốn mạnh P3)
+  # Ở đây tôi giữ 256 vì P3 cần chi tiết, giảm 128 sợ yếu.
+  - [[-1, 4], 1, BiFPN, [256]]                   # 13 (P3)
+  - [-1, 2, A2C2f, [256, False, -1]]             # 14 -> Detect P3
+
+  # === Bottom-up ===
+  - [-1, 1, Conv, [256, 3, 2]]
+  # GIẢM KÊNH: 512 -> 256
+  # Nút giao 3 nhánh vẫn giữ nguyên, chỉ giảm độ dày kênh
+  - [[-1, 6, 11], 1, BiFPN, [256]]               # 16 (P4)
+  - [-1, 2, A2C2f, [256, False, -1]]             # 17 -> Detect P4
+
+  - [-1, 1, Conv, [256, 3, 2]]
+  # GIẢM KÊNH: 1024 -> 512
+  # Đối với Nano, 512 ở P5 là đủ dùng. 1024 là thừa.
+  - [[-1, 8], 1, BiFPN, [512]]                   # 19 (P5)
+  - [-1, 2, C3k2, [512, True]]                   # 20 -> Detect P5
+
+  # Detect
+  - [[14, 17, 20], 1, Detect, [nc]]

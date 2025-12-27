@@ -7,7 +7,7 @@ if __name__ == '__main__':
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-test-17.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-unetv2.yaml')
     # model = YOLO(r'ultralytics/cfg/models/v12/yolov12.yaml')
-    # model = YOLO(r'ultralytics/cfg/models/v12/yolov12-test.yaml')
+    model = YOLO(r'ultralytics/cfg/models/v12/yolov12-test-02.yaml')
     # model = YOLO(r'ultralytics/cfg/models/v12/yolov12-bifpn-p2-ca.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-p2-bifpn-mhsa.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-test-new-01.yaml')
@@ -15,7 +15,7 @@ if __name__ == '__main__':
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-test-18.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-test-19.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-test-26.yaml')
-    model = YOLO(r'ultralytics/cfg/models/11/yolo11-test-26.yaml')
+    # model = YOLO(r'ultralytics/cfg/models/11/yolo11-test-27.yaml')
     # model = YOLO(r'ultralytics/cfg/models/v9/yolov9t.yaml')
     # model = YOLO(r'ultralytics/cfg/models/v10/yolov10n.yaml')
 
