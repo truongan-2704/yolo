@@ -1,0 +1,80 @@
+# Ultralytics YOLO 🚀, AGPL-3.0
+# YOLO12 SMART-P3 NANO: Manual Scaled
+# Logic: P2 Injection (High Detail) | Params: ~2.4M | Speed: Fast
+
+nc: 80
+scales:
+  n: [0.50, 0.25, 1024]
+  s: [0.50, 0.50, 1024]
+  m: [0.50, 1.00, 512]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.50, 512]
+
+backbone:
+  # [from, repeats, module, args]
+  # YOLO tự scale (x0.25): 256->64, 512->128, 1024->256
+  - [-1, 1, Conv, [64, 3, 2]]             # 0
+  - [-1, 1, Conv, [128, 3, 2]]            # 1
+  - [-1, 2, C3k2, [256, False, 0.25]]     # 2 (P2 - 64ch)
+  - [-1, 1, Conv, [256, 3, 2]]            # 3
+  - [-1, 2, C3k2, [512, False, 0.25]]     # 4 (P3 - 128ch)
+  - [-1, 1, Conv, [512, 3, 2]]            # 5
+  - [-1, 2, C3k2, [512, True]]            # 6 (P4 - 128ch)
+  - [-1, 1, Conv, [1024, 3, 2]]           # 7
+  - [-1, 2, C3k2, [1024, True]]           # 8 (P5 - 256ch)
+  - [-1, 1, SPPF, [1024, 5]]              # 9
+
+  # MANUAL SCALE: TripletAttention [256] (Khớp với P5 Nano)
+  - [-1, 1, TripletAttention, [256]]      # 10
+
+head:
+  # === Top-down (P5 -> P4 -> P3) ===
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 11
+
+  # MANUAL SCALE: P4 target 128 channels (Gốc 512 / 4)
+  - [[-1, 6], 1, BiFPN, [128]]                   # 12
+  # C3k2 [512] -> Auto scale thành 128
+  - [-1, 2, C3k2, [512, False]]                  # 13
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 14
+
+  # MANUAL SCALE: P3 target 64 channels (Gốc 256 / 4)
+  - [[-1, 4], 1, BiFPN, [64]]                    # 15
+  # C3k2 [256] -> Auto scale thành 64
+  - [-1, 2, C3k2, [256, False]]                  # 16 (P3 Top-down)
+
+  # === 🔥 P2 INJECTION (MANUAL SCALED) ===
+  # Lấy P2 (Layer 2) -> Conv giảm size xuống P3
+  # C3k2 [256] -> Auto scale thành 64 channels
+  - [2, 1, Conv, [256, 3, 2]]                    # 17 (P2 downsample -> 64ch)
+
+  # Hợp nhất P3: [P3 Top-down (64), P3 Backbone (128), P2 Injection (64)]
+  # MANUAL SCALE: Output target 64 channels
+  - [[16, 4, 17], 1, BiFPN, [64]]                # 18
+  # C3k2 [256] -> Auto scale thành 64
+  - [-1, 2, C3k2, [256, False]]                  # 19
+  # CoordAtt 64 channels (Nhẹ hều, giữ lại được)
+  - [-1, 1, CoordAtt, []]                        # 20 -> Detect P3
+
+  # === Bottom-up (P3 -> P4 -> P5) ===
+  # P3 lên P4
+  - [-1, 1, Conv, [256, 3, 2]]                   # 21 (Input 64 -> Output 64)
+
+  # Hợp nhất P4. MANUAL SCALE: Output target 128
+  - [[-1, 6, 13], 1, BiFPN, [128]]               # 22
+  # C3k2 [512] -> Auto scale thành 128
+  - [-1, 2, C3k2, [512, False]]                  # 23
+  - [-1, 1, CoordAtt, []]                        # 24 -> Detect P4
+
+  # P4 lên P5
+  - [-1, 1, Conv, [512, 3, 2]]                   # 25 (Input 128 -> Output 128)
+
+  # Hợp nhất P5. MANUAL SCALE: Output target 128 (Slim P5 cho nhẹ)
+  # Lưu ý: Ở bản cũ bạn để 512 nên nó nặng. Ở đây tôi để 128 (chuẩn Nano).
+  - [[-1, 10], 1, BiFPN, [128]]                  # 26
+  # C3k2 [512] -> Auto scale thành 128
+  - [-1, 2, C3k2, [512, True]]                   # 27 -> Detect P5
+
+  # Detect (P3, P4, P5)
+  # Output channels thực: [64, 128, 128]
+  - [[20, 24, 27], 1, Detect, [nc]]
