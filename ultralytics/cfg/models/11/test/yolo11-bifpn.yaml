@@ -1,5 +1,6 @@
 # Ultralytics YOLO 🚀, AGPL-3.0
-# YOLO12 RAW POWER: Heavy Backbone + BiFPN + P2 Loop (No Attention)
+# YOLO12 RAW POWER V2: Backbone with C2PSA + BiFPN + P2 Loop
+# No extra Attention in Head (Pure Convolution)
 
 nc: 80
 scales:
@@ -10,62 +11,61 @@ scales:
   x: [1.00, 1.50, 512]
 
 # =========================
-# Backbone (Clean - End at SPPF)
+# Backbone (SPPF + C2PSA)
 # =========================
 backbone:
   - [-1, 1, Conv, [64, 3, 2]]             # 0
   - [-1, 1, Conv, [128, 3, 2]]            # 1
-  - [-1, 2, C3k2, [256, False, 0.25]]     # 2
+  - [-1, 2, C3k2, [256, False, 0.25]]     # 2 - P2/4
   - [-1, 1, Conv, [256, 3, 2]]            # 3
-  - [-1, 2, C3k2, [512, False, 0.25]]     # 4
+  - [-1, 2, C3k2, [512, False, 0.25]]     # 4 - P3/8
   - [-1, 1, Conv, [512, 3, 2]]            # 5
-  - [-1, 2, C3k2, [512, True]]            # 6
+  - [-1, 2, C3k2, [512, True]]            # 6 - P4/16
   - [-1, 1, Conv, [1024, 3, 2]]           # 7
   - [-1, 2, C3k2, [1024, True]]           # 8
-  - [-1, 1, SPPF, [1024, 5]]              # 9 (Hết Backbone, bỏ Triplet cũ layer 10)
+  - [-1, 1, SPPF, [1024, 5]]              # 9
+
+  # ✅ BỔ SUNG C2PSA (Layer 10)
+  - [-1, 1, C2PSA, [1024]]                # 10 (Output Backbone chính)
 
 # =========================
-# Head (BiFPN Pure)
+# Head (BiFPN Pure - Index Shifted +1)
 # =========================
 head:
   # === Top-down Path ===
-  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 10
-  - [[-1, 6], 1, BiFPN, [256]]                   # 11 (Nối với P4 Backbone)
-  - [-1, 2, C3k2, [256, False]]                  # 12 (P4 Top-down)
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 11
+  - [[-1, 6], 1, BiFPN, [256]]                   # 12 (Nối với P4 Backbone)
+  - [-1, 2, C3k2, [256, False]]                  # 13 (P4 Top-down)
 
-  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 13
-  - [[-1, 4], 1, BiFPN, [256]]                   # 14 (Nối với P3 Backbone)
-  - [-1, 2, C3k2, [256, False]]                  # 15 (P3 Top-down -> Input cho Bottom-up)
-  # Bỏ CoordAtt cũ
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 14
+  - [[-1, 4], 1, BiFPN, [256]]                   # 15 (Nối với P3 Backbone)
+  - [-1, 2, C3k2, [256, False]]                  # 16 (P3 Top-down -> Input cho Bottom-up)
 
-  # === P2 Loop (Độ phân giải cao) ===
-  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 16
-  - [[-1, 2], 1, BiFPN, [256]]                   # 17 (Nối với P2 Backbone)
-  - [-1, 3, C3k2, [128, False]]                  # 18 (P2 Output)
-  # Bỏ CoordAtt cũ
+  # === P2 Loop (High Res) ===
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 17
+  - [[-1, 2], 1, BiFPN, [256]]                   # 18 (Nối với P2 Backbone)
+  - [-1, 3, C3k2, [128, False]]                  # 19 (P2 Output)
 
   # === Bottom-up Path ===
 
   # --- P3 Output ---
-  - [-1, 1, Conv, [256, 3, 2]]                   # 19 (Downsample P2)
-  # Input mới: [-1, 4, 15] (Layer 15 là P3 Top-down đã map lại)
-  - [[-1, 4, 15], 1, BiFPN, [256]]               # 20
-  - [-1, 4, C3k2, [256, False]]                  # 21 (P3 Final)
-  # Bỏ CoordAtt cũ
+  - [-1, 1, Conv, [256, 3, 2]]                   # 20 (Downsample P2)
+  # Input mới: [-1, 4, 16] (16 là P3 Top-down mới)
+  - [[-1, 4, 16], 1, BiFPN, [256]]               # 21
+  - [-1, 4, C3k2, [256, False]]                  # 22 (P3 Final)
 
   # --- P4 Output ---
-  - [-1, 1, Conv, [256, 3, 2]]                   # 22 (Downsample P3)
-  # Input mới: [-1, 6, 12] (Layer 12 là P4 Top-down đã map lại)
-  - [[-1, 6, 12], 1, BiFPN, [256]]               # 23
-  - [-1, 4, C3k2, [512, False]]                  # 24 (P4 Final)
-  # Bỏ CoordAtt cũ
+  - [-1, 1, Conv, [256, 3, 2]]                   # 23 (Downsample P3)
+  # Input mới: [-1, 6, 13] (13 là P4 Top-down mới)
+  - [[-1, 6, 13], 1, BiFPN, [256]]               # 24
+  - [-1, 4, C3k2, [512, False]]                  # 25 (P4 Final)
 
   # --- P5 Output ---
-  - [-1, 1, Conv, [256, 3, 2]]                   # 25 (Downsample P4)
-  # Input mới: [-1, 9] (Nối thẳng vào SPPF layer 9, vì layer 10 cũ đã xóa)
-  - [[-1, 9], 1, BiFPN, [512]]                   # 26
-  - [-1, 2, C3k2, [1024, True]]                  # 27 (P5 Final)
+  - [-1, 1, Conv, [256, 3, 2]]                   # 26 (Downsample P4)
+  # 🔥 Input mới: [-1, 10] (Nối vào C2PSA layer 10)
+  - [[-1, 10], 1, BiFPN, [512]]                  # 27
+  - [-1, 2, C3k2, [1024, True]]                  # 28 (P5 Final)
 
   # Detect
-  # Các layer output cuối cùng: 21 (P3), 24 (P4), 27 (P5)
-  - [[21, 24, 27], 1, Detect, [nc]]
+  # Output layers: 22(P3), 25(P4), 28(P5)
+  - [[22, 25, 28], 1, Detect, [nc]]
