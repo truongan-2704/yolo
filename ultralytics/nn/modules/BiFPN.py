@@ -125,27 +125,73 @@ class BiFPN_Concat(nn.Module):
 #
 #         return self.act(out)
 
+# class BiFPN(nn.Module):
+#     def __init__(self, ch, c2):
+#         super().__init__()
+#
+#         self.w = nn.Parameter(torch.ones(len(ch), dtype=torch.float32), requires_grad=True)
+#         self.epsilon = 1e-4
+#         self.convs = nn.ModuleList()
+#
+#         for c_in in ch:
+#             self.convs.append(Conv(c_in, c2, 1, 1))
+#
+#         self.act = nn.SiLU()
+#
+#     def forward(self, x):
+#
+#         w = self.w
+#         weight = w / (torch.sum(w, dim=0) + self.epsilon)
+#         out = 0
+#         for i in range(len(x)):
+#             out += weight[i] * self.convs[i](x[i])
+#         return self.act(out)
+#
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from .conv import Conv  # Import Conv chuẩn từ Ultralytics
+
+
 class BiFPN(nn.Module):
-    def __init__(self, ch, c2):
+    def __init__(self, c1, c2):
         super().__init__()
+        # Xử lý linh hoạt đầu vào c1 (có thể là int hoặc list)
+        if isinstance(c1, int):
+            c1 = [c1]
 
-        self.w = nn.Parameter(torch.ones(len(ch), dtype=torch.float32), requires_grad=True)
+        # Trọng số học được
+        self.w = nn.Parameter(torch.ones(len(c1), dtype=torch.float32), requires_grad=True)
         self.epsilon = 1e-4
-        self.convs = nn.ModuleList()
 
-        for c_in in ch:
-            self.convs.append(Conv(c_in, c2, 1, 1))
+        # Các lớp Conv để đồng bộ hóa Channels
+        self.convs = nn.ModuleList([Conv(x, c2, 1, 1) for x in c1])
 
         self.act = nn.SiLU()
 
     def forward(self, x):
-
+        # Trọng số chuẩn hóa
         w = self.w
         weight = w / (torch.sum(w, dim=0) + self.epsilon)
+
+        # Lấy kích thước mục tiêu từ input đầu tiên (thường là input tại tầng hiện tại trong YAML)
+        # Ví dụ: Tại tầng P3, input đầu tiên thường là P3 gốc -> target_size chuẩn.
+        target_size = x[0].shape[2:]
+
         out = 0
         for i in range(len(x)):
-            out += weight[i] * self.convs[i](x[i])
+            # 1. Đồng bộ Channel
+            feat = self.convs[i](x[i])
+
+            # 2. Đồng bộ Spatial Size (QUAN TRỌNG: Resize an toàn)
+            if feat.shape[2:] != target_size:
+                feat = F.interpolate(feat, size=target_size, mode='nearest')
+
+            # 3. Cộng dồn
+            out += weight[i] * feat
+
         return self.act(out)
+
 
 class MultiHeadSelfAttention(nn.Module):
     def __init__(self, embed_dim, num_heads):
