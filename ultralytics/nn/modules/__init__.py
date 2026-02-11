@@ -47,6 +47,8 @@ from .IDC import InceptionDWConv2d, C3k2_IDC, Bottleneck_IDC
 
 from .SHSA import SHSA
 
+from .EfficientNetV2 import MBConv,FusedMBConv, SE
+
 from .block import (
     C1,
     C2,
@@ -89,6 +91,7 @@ from .block import (
     TorchVision,
     A2C2f,
     A2C2f_SimAM,
+
 )
 from .conv import (
     CBAM,

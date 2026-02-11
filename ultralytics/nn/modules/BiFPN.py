@@ -34,7 +34,7 @@ class BiFPN_Concat(nn.Module):
             x = self.conv(self.act(weight[0] * x[0] + weight[1] * x[1] + weight[2] * x[2]))
         return x
 
-
+#
 # class swish(nn.Module):
 #     def forward(self, x):
 #         return x * torch.sigmoid(x)
@@ -54,7 +54,7 @@ class BiFPN_Concat(nn.Module):
 #         result = torch.sum(stacked_feature_maps, dim=0)
 #         return result
 #
-#
+
 # import torch
 # import torch.nn as nn
 
@@ -220,7 +220,7 @@ class BiFPN_Concat(nn.Module):
 #             out += weight[i] * feat
 #
 #         return self.act(out)
-
+#
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

@@ -81,8 +81,13 @@ from ultralytics.nn.modules import (
     MSFM,
     A2C2f_SimAM,
     UNetV2,
-    SKAttention, SHSA
+    SKAttention, SHSA,
+    MBConv,
+    FusedMBConv,
+    SE
 )
+
+
 
 from ultralytics.nn.modules import (BiFPN_Concat, BiFPN, BiFPN_Transformer)
 
@@ -1019,7 +1024,9 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             A2C2f,
             AKConv,
             Dynamic_conv2d,A2C2f_SimAM,
-            SKAttention
+            SKAttention,
+            FusedMBConv,  # Thêm vào đây để YOLO tính c2 = make_divisible(c2 * width)
+            MBConv
 
         }:
             c1, c2 = ch[f], args[0]
@@ -1049,6 +1056,8 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
                 C2PSA,
                 A2C2f,
                 A2C2f_SimAM,
+                FusedMBConv,
+                MBConv
             }:
                 args.insert(2, n)  # number of repeats
                 n = 1
