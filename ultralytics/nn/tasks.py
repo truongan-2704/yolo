@@ -1089,10 +1089,10 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             if c2 != nc:  # if c2 not equal to number of classes (i.e. for Classify() output)
                 c2 = make_divisible(min(c2, max_channels) * width, 8)
             args = [c1, c2, *args[1:]]
-        elif m is Concat:
+        elif m in {Concat, BiFPN_Concat}:
             c2 = sum(ch[x] for x in f)
-        elif m is BiFPN_Concat:
-            c2 = max(ch[x] for x in f)
+        # elif m is BiFPN_Concat:
+        #     c2 = max(ch[x] for x in f)
         # elif m in {BiFPN, BiFPN_Transformer}:
         #     length = len([ch[x] for x in f])
         #     args = [length]

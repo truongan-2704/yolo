@@ -14,25 +14,44 @@ def autopad(k, p=None, d=1):
     return p
 
 
+# class BiFPN_Concat(nn.Module):
+#     def __init__(self, c1, c2):
+#         super(BiFPN_Concat, self).__init__()
+#         self.w1_weight = nn.Parameter(torch.ones(2, dtype=torch.float32), requires_grad=True)
+#         self.w2_weight = nn.Parameter(torch.ones(3, dtype=torch.float32), requires_grad=True)
+#         self.epsilon = 0.0001
+#         self.conv = Conv(c1, c2, 1, 1, 0)
+#         self.act = nn.ReLU()
+#
+#     def forward(self, x):
+#         if len(x) == 2:
+#             w = self.w1_weight
+#             weight = w / (torch.sum(w, dim=0) + self.epsilon)
+#             x = self.conv(self.act(weight[0] * x[0] + weight[1] * x[1]))
+#         elif len(x) == 3:
+#             w = self.w2_weight
+#             weight = w / (torch.sum(w, dim=0) + self.epsilon)
+#             x = self.conv(self.act(weight[0] * x[0] + weight[1] * x[1] + weight[2] * x[2]))
+#         return x
+
+import torch
+import torch.nn as nn
+
 class BiFPN_Concat(nn.Module):
-    def __init__(self, c1, c2):
+    # BiFPN Weighted Feature Fusion
+    def __init__(self, dimension=1):
         super(BiFPN_Concat, self).__init__()
-        self.w1_weight = nn.Parameter(torch.ones(2, dtype=torch.float32), requires_grad=True)
-        self.w2_weight = nn.Parameter(torch.ones(3, dtype=torch.float32), requires_grad=True)
+        self.d = dimension
+        # Khởi tạo trọng số ban đầu bằng 1.0 cho 2 đầu vào
+        self.w = nn.Parameter(torch.ones(2, dtype=torch.float32), requires_grad=True)
         self.epsilon = 0.0001
-        self.conv = Conv(c1, c2, 1, 1, 0)
-        self.act = nn.ReLU()
 
     def forward(self, x):
-        if len(x) == 2:
-            w = self.w1_weight
-            weight = w / (torch.sum(w, dim=0) + self.epsilon)
-            x = self.conv(self.act(weight[0] * x[0] + weight[1] * x[1]))
-        elif len(x) == 3:
-            w = self.w2_weight
-            weight = w / (torch.sum(w, dim=0) + self.epsilon)
-            x = self.conv(self.act(weight[0] * x[0] + weight[1] * x[1] + weight[2] * x[2]))
-        return x
+        # x là list chứa 2 tensor cần ghép (ví dụ: layer đi xuống và layer backbone)
+        weight = self.w / (torch.sum(self.w, dim=0) + self.epsilon)
+        # Nhân trọng số rồi Concat thay vì cộng để khớp chuẩn YOLO
+        x_weighted = [x[0] * weight[0], x[1] * weight[1]]
+        return torch.cat(x_weighted, self.d)
 
 #
 # class swish(nn.Module):
