@@ -341,6 +341,9 @@ class DetectionModel(BaseModel):
             LOGGER.info(f"Overriding model.yaml nc={self.yaml['nc']} with nc={nc}")
             self.yaml["nc"] = nc  # override YAML value
         self.model, self.save = parse_model(deepcopy(self.yaml), ch=ch, verbose=verbose)  # model, savelist
+
+        auto_set_droppath(self.model, max_drop_prob=0.2)
+
         self.names = {i: f"{i}" for i in range(self.yaml["nc"])}  # default names dict
         self.inplace = self.yaml.get("inplace", True)
         self.end2end = getattr(self.model[-1], "end2end", False)
@@ -953,6 +956,29 @@ def attempt_load_one_weight(weight, device=None, inplace=True, fuse=False):
 
     # Return model and ckpt
     return model, ckpt
+
+
+def auto_set_droppath(model, max_drop_prob=0.2):
+    blocks = []
+
+    for m in model.modules():
+        # EfficientNet stacks
+        if hasattr(m, "blocks"):
+            for b in m.blocks:
+                if hasattr(b, "drop_path"):
+                    blocks.append(b)
+
+    L = len(blocks)
+    if L == 0:
+        print("⚠️ No EfficientNet blocks found")
+        return
+
+    for i, b in enumerate(blocks):
+        dp = max_drop_prob * i / (L - 1) if L > 1 else 0.0
+        if hasattr(b.drop_path, "drop_prob"):
+            b.drop_path.drop_prob = dp
+
+    print(f"✅ Đã tự động kích hoạt DropPath tuyến tính cho {L} blocks (Max p={max_drop_prob}).")
 
 
 def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)

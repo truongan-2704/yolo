@@ -36,21 +36,35 @@ def autopad(k, p=None, d=1):
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F  # <--- Cần import thêm thư viện này
+
 
 class BiFPN_Concat(nn.Module):
-    # BiFPN Weighted Feature Fusion
+    """
+    BiFPN Weighted Feature Fusion (Chuẩn theo paper EfficientDet)
+    """
+
     def __init__(self, dimension=1):
         super(BiFPN_Concat, self).__init__()
         self.d = dimension
-        # Khởi tạo trọng số ban đầu bằng 1.0 cho 2 đầu vào
+        self.epsilon = 1e-4  # Viết gọn lại (0.0001)
+
+        # YOLO11 Neck thường nối 2 layer (ví dụ: layer đi xuống và layer backbone)
+        # Nếu kiến trúc của bạn nối 3 layer, hãy đổi số 2 thành 3
         self.w = nn.Parameter(torch.ones(2, dtype=torch.float32), requires_grad=True)
-        self.epsilon = 0.0001
 
     def forward(self, x):
-        # x là list chứa 2 tensor cần ghép (ví dụ: layer đi xuống và layer backbone)
-        weight = self.w / (torch.sum(self.w, dim=0) + self.epsilon)
-        # Nhân trọng số rồi Concat thay vì cộng để khớp chuẩn YOLO
-        x_weighted = [x[0] * weight[0], x[1] * weight[1]]
+        # BƯỚC TỐI ƯU 1: Ép trọng số phải >= 0 bằng ReLU
+        w = F.relu(self.w)
+
+        # BƯỚC TỐI ƯU 2: Tính toán chuẩn hóa
+        weight = w / (torch.sum(w, dim=0) + self.epsilon)
+
+        # BƯỚC TỐI ƯU 3: Nhân trọng số tương ứng cho từng tensor và Concat
+        # Dùng List Comprehension giúp code chạy nhanh hơn và tự động tương thích
+        # dù x có 2 hay 3 phần tử (với điều kiện khởi tạo self.w tương ứng)
+        x_weighted = [x[i] * weight[i] for i in range(len(x))]
+
         return torch.cat(x_weighted, self.d)
 
 #
