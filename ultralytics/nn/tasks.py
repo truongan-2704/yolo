@@ -342,7 +342,7 @@ class DetectionModel(BaseModel):
             self.yaml["nc"] = nc  # override YAML value
         self.model, self.save = parse_model(deepcopy(self.yaml), ch=ch, verbose=verbose)  # model, savelist
 
-        auto_set_droppath(self.model, max_drop_prob=0.2)
+        auto_set_droppath(self.model, max_drop_prob=0.0)
 
         self.names = {i: f"{i}" for i in range(self.yaml["nc"])}  # default names dict
         self.inplace = self.yaml.get("inplace", True)
@@ -958,7 +958,7 @@ def attempt_load_one_weight(weight, device=None, inplace=True, fuse=False):
     return model, ckpt
 
 
-def auto_set_droppath(model, max_drop_prob=0.2):
+def auto_set_droppath(model, max_drop_prob=0.0):
     blocks = []
 
     for m in model.modules():
