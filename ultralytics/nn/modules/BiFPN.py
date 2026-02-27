@@ -38,33 +38,32 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F  # <--- Cần import thêm thư viện này
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
 
 class BiFPN_Concat(nn.Module):
     """
-    BiFPN Weighted Feature Fusion (Chuẩn theo paper EfficientDet)
+    Weighted Concat cho phép tự động nhận diện số lượng nhánh đầu vào (n).
+    Tối ưu hóa cho các bài toán phát hiện vật thể nhỏ (như BCCD).
     """
 
-    def __init__(self, dimension=1):
-        super(BiFPN_Concat, self).__init__()
+    def __init__(self, dimension=1, n=2):
+        super().__init__()
         self.d = dimension
-        self.epsilon = 1e-4  # Viết gọn lại (0.0001)
-
-        # YOLO11 Neck thường nối 2 layer (ví dụ: layer đi xuống và layer backbone)
-        # Nếu kiến trúc của bạn nối 3 layer, hãy đổi số 2 thành 3
-        self.w = nn.Parameter(torch.ones(2, dtype=torch.float32), requires_grad=True)
+        # Trọng số có thể học được, khởi tạo là 1 cho n nhánh
+        self.w = nn.Parameter(torch.ones(n, dtype=torch.float32), requires_grad=True)
+        self.epsilon = 1e-4
 
     def forward(self, x):
-        # BƯỚC TỐI ƯU 1: Ép trọng số phải >= 0 bằng ReLU
+        # Đảm bảo trọng số luôn dương
         w = F.relu(self.w)
-
-        # BƯỚC TỐI ƯU 2: Tính toán chuẩn hóa
+        # Chuẩn hóa trọng số (tổng các trọng số = 1)
         weight = w / (torch.sum(w, dim=0) + self.epsilon)
 
-        # BƯỚC TỐI ƯU 3: Nhân trọng số tương ứng cho từng tensor và Concat
-        # Dùng List Comprehension giúp code chạy nhanh hơn và tự động tương thích
-        # dù x có 2 hay 3 phần tử (với điều kiện khởi tạo self.w tương ứng)
+        # Nhân trọng số vào từng nhánh trước khi nối
         x_weighted = [x[i] * weight[i] for i in range(len(x))]
-
         return torch.cat(x_weighted, self.d)
 
 #

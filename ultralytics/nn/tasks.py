@@ -1115,13 +1115,15 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             if c2 != nc:  # if c2 not equal to number of classes (i.e. for Classify() output)
                 c2 = make_divisible(min(c2, max_channels) * width, 8)
             args = [c1, c2, *args[1:]]
-        elif m in {Concat, BiFPN_Concat}:
+        elif m is Concat:
             c2 = sum(ch[x] for x in f)
-        # elif m is BiFPN_Concat:
-        #     c2 = max(ch[x] for x in f)
-        # elif m in {BiFPN, BiFPN_Transformer}:
-        #     length = len([ch[x] for x in f])
-        #     args = [length]
+            # --- ĐOẠN CODE BẠN CẦN THÊM VÀO DƯỚI CONCAT ---
+        elif m is BiFPN_Concat:
+            c2 = sum(ch[x] for x in f)  # Số channel sau khi nối vẫn giữ nguyên
+            # args[0] là dimension (thường là 1)
+            # len(f) chính là số lượng layer đầu vào (n), ví dụ f=[-1, 5] thì n=2
+            args = [args[0], len(f)]
+            # ----------------------------------------------
             # === THÊM ĐOẠN NÀY ===
         elif m is BiFPN:
             # Vẫn cần cái này để tính toán c2 cho đúng (ví dụ Nano là 64)
