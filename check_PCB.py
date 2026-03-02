@@ -7,7 +7,8 @@ from pathlib import Path
 from datetime import datetime
 import torch
 import glob
-from typing import Dict, List, Tuple, Optional, Set
+from typing import Dict, List, Tuple, Optional, Set, Union
+
 
 # ---------------- Utils ----------------
 def ensure_image_list(source: str) -> list:
@@ -62,7 +63,7 @@ def detect_pcb(
     imgsz: int = 1024,
     conf: float = 0.25,
     iou: float = 0.45,
-    device: Optional[str | int] = None,
+    device: Optional[Union[str, int]] = None,
     half: bool = False,
     interest_classes: Optional[Set[str]] = None,
     cross_class_nms: bool = False,

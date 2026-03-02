@@ -66,26 +66,26 @@ class BiFPN_Concat(nn.Module):
         x_weighted = [x[i] * weight[i] for i in range(len(x))]
         return torch.cat(x_weighted, self.d)
 
-#
-# class swish(nn.Module):
-#     def forward(self, x):
-#         return x * torch.sigmoid(x)
-#
-#
-# class BiFPN(nn.Module):
-#     def __init__(self, length):
-#         super().__init__()
-#         self.weight = nn.Parameter(torch.ones(length, dtype=torch.float32), requires_grad=True)
-#         self.swish = swish()
-#         self.epsilon = 0.0001
-#
-#     def forward(self, x):
-#         weights = self.weight / (torch.sum(self.swish(self.weight), dim=0) + self.epsilon)
-#         weighted_feature_maps = [weights[i] * x[i] for i in range(len(x))]
-#         stacked_feature_maps = torch.stack(weighted_feature_maps, dim=0)
-#         result = torch.sum(stacked_feature_maps, dim=0)
-#         return result
-#
+
+class swish(nn.Module):
+    def forward(self, x):
+        return x * torch.sigmoid(x)
+
+
+class BiFPN(nn.Module):
+    def __init__(self, length):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(length, dtype=torch.float32), requires_grad=True)
+        self.swish = swish()
+        self.epsilon = 0.0001
+
+    def forward(self, x):
+        weights = self.weight / (torch.sum(self.swish(self.weight), dim=0) + self.epsilon)
+        weighted_feature_maps = [weights[i] * x[i] for i in range(len(x))]
+        stacked_feature_maps = torch.stack(weighted_feature_maps, dim=0)
+        result = torch.sum(stacked_feature_maps, dim=0)
+        return result
+
 
 # import torch
 # import torch.nn as nn
@@ -252,53 +252,53 @@ class BiFPN_Concat(nn.Module):
 #             out += weight[i] * feat
 #
 #         return self.act(out)
+# #
+# import torch
+# import torch.nn as nn
+# import torch.nn.functional as F
+# from .conv import Conv
 #
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from .conv import Conv
-
-class BiFPN(nn.Module):
-    def __init__(self, c1, c2): # Đổi ch -> c1 để khớp với YOLO parser
-        super().__init__()
-        # Xử lý nếu c1 không phải list (đề phòng lỗi)
-        if isinstance(c1, int):
-            c1 = [c1]
-
-        # Trọng số học (Learnable Weights)
-        self.w = nn.Parameter(torch.ones(len(c1), dtype=torch.float32), requires_grad=True)
-        self.epsilon = 1e-4
-
-        # Các lớp Conv 1x1 để đồng bộ số kênh về c2
-        self.convs = nn.ModuleList([Conv(x, c2, 1, 1) for x in c1])
-        self.act = nn.SiLU()
-
-    def forward(self, x):
-        # Input x phải là list. Nếu x là tensor đơn (do c1 là int), bọc nó vào list
-        if isinstance(x, torch.Tensor):
-            x = [x]
-
-        # 1. Đảm bảo trọng số không âm (Quan trọng cho tính ổn định)
-        w = torch.relu(self.w)
-        weight = w / (torch.sum(w, dim=0) + self.epsilon)
-
-        # Lấy kích thước của feature map đầu tiên làm đích
-        target_size = x[0].shape[2:]
-
-        out = 0
-        for i in range(len(x)):
-            # Bước A: Đồng bộ kênh
-            feat = self.convs[i](x[i])
-
-            # Bước B: Resize nếu kích thước không khớp (Tránh lỗi runtime)
-            if feat.shape[2:] != target_size:
-                feat = F.interpolate(feat, size=target_size, mode='nearest')
-
-            # Bước C: Cộng gộp
-            out += weight[i] * feat
-
-        return self.act(out)
-
+# class BiFPN(nn.Module):
+#     def __init__(self, c1, c2): # Đổi ch -> c1 để khớp với YOLO parser
+#         super().__init__()
+#         # Xử lý nếu c1 không phải list (đề phòng lỗi)
+#         if isinstance(c1, int):
+#             c1 = [c1]
+#
+#         # Trọng số học (Learnable Weights)
+#         self.w = nn.Parameter(torch.ones(len(c1), dtype=torch.float32), requires_grad=True)
+#         self.epsilon = 1e-4
+#
+#         # Các lớp Conv 1x1 để đồng bộ số kênh về c2
+#         self.convs = nn.ModuleList([Conv(x, c2, 1, 1) for x in c1])
+#         self.act = nn.SiLU()
+#
+#     def forward(self, x):
+#         # Input x phải là list. Nếu x là tensor đơn (do c1 là int), bọc nó vào list
+#         if isinstance(x, torch.Tensor):
+#             x = [x]
+#
+#         # 1. Đảm bảo trọng số không âm (Quan trọng cho tính ổn định)
+#         w = torch.relu(self.w)
+#         weight = w / (torch.sum(w, dim=0) + self.epsilon)
+#
+#         # Lấy kích thước của feature map đầu tiên làm đích
+#         target_size = x[0].shape[2:]
+#
+#         out = 0
+#         for i in range(len(x)):
+#             # Bước A: Đồng bộ kênh
+#             feat = self.convs[i](x[i])
+#
+#             # Bước B: Resize nếu kích thước không khớp (Tránh lỗi runtime)
+#             if feat.shape[2:] != target_size:
+#                 feat = F.interpolate(feat, size=target_size, mode='nearest')
+#
+#             # Bước C: Cộng gộp
+#             out += weight[i] * feat
+#
+#         return self.act(out)
+#
 
 class MultiHeadSelfAttention(nn.Module):
     def __init__(self, embed_dim, num_heads):

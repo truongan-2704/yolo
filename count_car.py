@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 model = YOLO('yolov8-bifpn-mhsa.pt')
 
 # Đọc ảnh
-image = cv2.imread('img_4.png')
+image = cv2.imread('img.png')
 
 # Predict
 results = model(image)
