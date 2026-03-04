@@ -84,7 +84,7 @@ from ultralytics.nn.modules import (
     SKAttention, SHSA,
     MBConv,
     FusedMBConv,
-    SE
+    SE, C3k2_CBAM
 )
 
 
@@ -1052,7 +1052,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             Dynamic_conv2d,A2C2f_SimAM,
             SKAttention,
             FusedMBConv,  # Thêm vào đây để YOLO tính c2 = make_divisible(c2 * width)
-            MBConv
+            MBConv, C3k2_CBAM
 
         }:
             c1, c2 = ch[f], args[0]
@@ -1083,14 +1083,14 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
                 A2C2f,
                 A2C2f_SimAM,
                 FusedMBConv,
-                MBConv
+                MBConv,C3k2_CBAM
             }:
                 args.insert(2, n)  # number of repeats
                 n = 1
-            if m is C3k2:  # for M/L/X sizes
+            if m in {C3k2, C3k2_CBAM}:  # Áp dụng cho cả C3k2 gốc và bản CBAM của bạn
                 legacy = False
                 if scale in "mlx":
-                    args[3] = True
+                    args[3] = True  # Bật tham số c3k=True cho các bản M/L/X
             if m is A2C2f: 
                 legacy = False
                 if scale in "lx":  # for L/X sizes

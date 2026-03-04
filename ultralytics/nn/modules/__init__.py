@@ -91,6 +91,7 @@ from .block import (
     TorchVision,
     A2C2f,
     A2C2f_SimAM,
+C3k2_CBAM
 
 )
 from .conv import (

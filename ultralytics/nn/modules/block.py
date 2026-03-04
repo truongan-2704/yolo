@@ -7,6 +7,8 @@ import torch.nn.functional as F
 
 from ultralytics.utils.torch_utils import fuse_conv_and_bn
 
+from ultralytics.nn.modules import CBAM
+
 from .conv import Conv, DWConv, GhostConv, LightConv, RepConv, autopad
 from .transformer import TransformerBlock
 
@@ -799,6 +801,25 @@ class C3k2(C2f):
         self.m = nn.ModuleList(
             C3k(self.c, self.c, 2, shortcut, g) if c3k else Bottleneck(self.c, self.c, shortcut, g) for _ in range(n)
         )
+
+#Cải tiến
+
+class C3k2_CBAM(C2f):
+    def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
+        super().__init__(c1, c2, n, shortcut, g, e)
+        # Khởi tạo danh sách các block C3k hoặc Bottleneck
+        self.m = nn.ModuleList(
+            C3k(self.c, self.c, 2, shortcut, g) if c3k else Bottleneck(self.c, self.c, shortcut, g) for _ in range(n)
+        )
+        # Thêm lớp CBAM ở cuối
+        self.cbam = CBAM(c2)
+
+    def forward(self, x):
+        """Forward pass qua C3k2 sau đó qua CBAM."""
+        y = list(self.cv1(x).chunk(2, 1))
+        y.extend(m(y[-1]) for m in self.m)
+        out = self.cv2(torch.cat(y, 1))
+        return self.cbam(out)
 
 
 class C3k(C3):
