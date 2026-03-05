@@ -803,24 +803,47 @@ class C3k2(C2f):
         )
 
 #Cải tiến
+
+# class C3k2_CBAM(C2f):
+#     def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
+#         super().__init__(c1, c2, n, shortcut, g, e)
+#         # Khởi tạo danh sách các block C3k hoặc Bottleneck
+#         self.m = nn.ModuleList(
+#             C3k(self.c, self.c, 2, shortcut, g) if c3k else Bottleneck(self.c, self.c, shortcut, g) for _ in range(n)
+#         )
+#         # Thêm lớp CBAM ở cuối
+#         self.cbam = CBAM(c2)
+#
+#     def forward(self, x):
+#         """Forward pass qua C3k2 sau đó qua CBAM."""
+#         y = list(self.cv1(x).chunk(2, 1))
+#         y.extend(m(y[-1]) for m in self.m)
+#         out = self.cv2(torch.cat(y, 1))
+#         return self.cbam(out)
+#
+
 class C3k2_CBAM(C2f):
     def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
         super().__init__(c1, c2, n, shortcut, g, e)
-        # self.c đã được tính toán trong super().__init__ (thường là c2 * e)
-
+        # Khởi tạo các block m dựa trên hidden channels (self.c)
         self.m = nn.ModuleList(
             C3k(self.c, self.c, 2, shortcut, g) if c3k else Bottleneck(self.c, self.c, shortcut, g)
             for _ in range(n)
         )
-        # SỬA Ở ĐÂY: Dùng self.c thay vì c2
-        self.cbam = CBAM(self.c)
+        # CBAM phải khởi tạo với c2 để khớp với đầu ra cuối cùng
+        self.cbam = CBAM(c2)
 
     def forward(self, x):
+        # 1. Tách nhánh và xử lý qua các block m (giữ nguyên gốc YOLO)
         y = list(self.cv1(x).chunk(2, 1))
-        for m_block in self.m:
-            # Bây giờ m_block ra 64 channels, cbam cũng nhận 64 channels -> Khớp!
-            y.append(self.cbam(m_block(y[-1])))
-        return self.cv2(torch.cat(y, 1))
+        y.extend(m(y[-1]) for m in self.m)
+
+        # 2. Tổng hợp đặc trưng qua lớp cv2
+        out = self.cv2(torch.cat(y, 1))
+
+        # 3. KẾT NỐI PHẦN DƯ: Đây là điểm khác biệt cốt lõi
+        # Thay vì chỉ return self.cbam(out), ta cộng thêm 'out' gốc vào
+        return out + self.cbam(out)
 
 
 class C3k(C3):
