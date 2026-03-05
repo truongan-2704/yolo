@@ -803,23 +803,24 @@ class C3k2(C2f):
         )
 
 #Cải tiến
-
 class C3k2_CBAM(C2f):
     def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
         super().__init__(c1, c2, n, shortcut, g, e)
-        # Khởi tạo danh sách các block C3k hoặc Bottleneck
+        # self.c đã được tính toán trong super().__init__ (thường là c2 * e)
+
         self.m = nn.ModuleList(
-            C3k(self.c, self.c, 2, shortcut, g) if c3k else Bottleneck(self.c, self.c, shortcut, g) for _ in range(n)
+            C3k(self.c, self.c, 2, shortcut, g) if c3k else Bottleneck(self.c, self.c, shortcut, g)
+            for _ in range(n)
         )
-        # Thêm lớp CBAM ở cuối
-        self.cbam = CBAM(c2)
+        # SỬA Ở ĐÂY: Dùng self.c thay vì c2
+        self.cbam = CBAM(self.c)
 
     def forward(self, x):
-        """Forward pass qua C3k2 sau đó qua CBAM."""
         y = list(self.cv1(x).chunk(2, 1))
-        y.extend(m(y[-1]) for m in self.m)
-        out = self.cv2(torch.cat(y, 1))
-        return self.cbam(out)
+        for m_block in self.m:
+            # Bây giờ m_block ra 64 channels, cbam cũng nhận 64 channels -> Khớp!
+            y.append(self.cbam(m_block(y[-1])))
+        return self.cv2(torch.cat(y, 1))
 
 
 class C3k(C3):
