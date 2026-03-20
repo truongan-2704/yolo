@@ -1,5 +1,5 @@
 # Ultralytics YOLO 🚀, AGPL-3.0 license
-# YOLO11 object detection model with P3-P5 outputs and CBAM attention.
+# YOLO11 object detection model with P3-P5 outputs and 3 CoordAtt layers.
 
 # Parameters
 nc: 80
@@ -34,20 +34,20 @@ head:
   - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 11
   - [[-1, 6], 1, Concat, [1]]                  # 12: up(P5) + P4 (index 6)
   - [-1, 2, C3k2, [512, False]]                # 13: P4 head
-  - [-1, 1, CoordAtt, []]                     # 14: SimAM on P4
+  - [-1, 1, CoordAtt, []]                      # 14: CoordAtt on P4
 
   - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 15
   - [[-1, 4], 1, Concat, [1]]                  # 16: up(P4) + P3 (index 4)
   - [-1, 2, C3k2, [256, False]]                # 17: P3 head (P3/8-small)
-  - [-1, 1, CoordAtt, []]                     # 18: SimAM on P3 -> First Detect Input
+  - [-1, 1, CoordAtt, []]                      # 18: CoordAtt on P3 -> First Detect Input
 
   - [-1, 1, Conv, [256, 3, 2]]                 # 19: down to P4 scale
-  - [[-1, 14], 1, Concat, [1]]                 # 20: + P4 head feat (from CBAM at index 14)
-  - [-1, 2, C3k2, [512, False]]                # 21: P4 head (P4/16-medium) -> Second Detect Input
-  - [-1, 1, CoordAtt, []]
-  -
-  - [-1, 1, Conv, [512, 3, 2]]                 # 22: down to P5 scale
-  - [[-1, 10], 1, Concat, [1]]                 # 23: + P5 bottleneck (from backbone index 10)
-  - [-1, 2, C3k2, [1024, True]]                # 24: P5 head (P5/32-large) -> Third Detect Input
+  - [[-1, 14], 1, Concat, [1]]                 # 20: + P4 head feat (from CoordAtt at index 14)
+  - [-1, 2, C3k2, [512, False]]                # 21: P4 head (P4/16-medium)
+  - [-1, 1, CoordAtt, []]                      # 22: CoordAtt on P4 -> Second Detect Input
 
-  - [[18, 21, 24], 1, Detect, [nc]]            # 25: Detect(P3, P4, P5)
+  - [-1, 1, Conv, [512, 3, 2]]                 # 23: down to P5 scale
+  - [[-1, 10], 1, Concat, [1]]                 # 24: + P5 bottleneck (from backbone index 10)
+  - [-1, 2, C3k2, [1024, True]]                # 25: P5 head (P5/32-large) -> Third Detect Input
+
+  - [[18, 22, 25], 1, Detect, [nc]]            # 26: Detect(P3, P4, P5)

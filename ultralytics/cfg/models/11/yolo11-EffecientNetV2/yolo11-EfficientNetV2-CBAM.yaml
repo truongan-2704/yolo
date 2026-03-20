@@ -2,6 +2,10 @@ nc: 80
 scales:
   # Sử dụng scale n của YOLO11: depth_multiple=0.5, width_multiple=0.25
   n: [0.50, 0.25, 1024]
+  s: [ 0.50, 0.50, 1024]
+  m: [ 0.50, 1.00, 512 ]
+  l: [ 1.00, 1.00, 512 ]
+  x: [ 1.00, 1.50, 512 ]
 
 backbone:
   # [from, repeats, module, args]
