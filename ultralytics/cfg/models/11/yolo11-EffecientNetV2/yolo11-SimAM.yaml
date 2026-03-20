@@ -44,6 +44,7 @@ head:
   - [-1, 1, Conv, [256, 3, 2]]                 # 19: down to P4 scale
   - [[-1, 14], 1, Concat, [1]]                 # 20: + P4 head feat (from CBAM at index 14)
   - [-1, 2, C3k2, [512, False]]                # 21: P4 head (P4/16-medium) -> Second Detect Input
+  - [-1, 1, SimAM, [512]]
 
   - [-1, 1, Conv, [512, 3, 2]]                 # 22: down to P5 scale
   - [[-1, 10], 1, Concat, [1]]                 # 23: + P5 bottleneck (from backbone index 10)
