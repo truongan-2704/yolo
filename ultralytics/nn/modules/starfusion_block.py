@@ -21,109 +21,109 @@ Usage:
     C3k2_DCNF(c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True)
 """
 
-import torch
-import torch.nn as nn
-
-from ultralytics.nn.modules.conv import Conv, autopad
-
-
-class StarFusionBottleneck(nn.Module):
-    """
-    StarFusion Bottleneck: Multi-Scale Dilated Asymmetric Context + Star Operation.
-
-    Replaces the standard 2×Conv3×3 Bottleneck with:
-    1. Conv 1×1 (channel reduction c → c//2)
-    2. Three parallel depthwise branches:
-       - Branch_L: DWConv 3×3 (local texture)
-       - Branch_D: DWConv 3×3 dilation=2 (dilated, RF=7×7)
-       - Branch_A: DWConv 1×5 → DWConv 5×1 (asymmetric cross-shaped)
-    3. Star Operation (★): element-wise multiplication of all three branches
-    4. Context-Aware Gate: Sigmoid(Conv1×1(AvgPool(star_out)))
-    5. Conv 1×1 (channel expansion c//2 → c)
-    6. Optional residual connection
-
-    Args:
-        c1 (int): Input channels.
-        c2 (int): Output channels.
-        shortcut (bool): Whether to use residual connection. Default True.
-        g (int): Groups for pointwise convolutions. Default 1.
-        e (float): Expansion ratio for hidden channels. Default 0.5.
-    """
-
-    # def __init__(self, c1, c2, shortcut=True, g=1, e=0.5):
-    #     """Initialize StarFusionBottleneck with channel reduction, MDAC branches, star fusion and gating."""
-    #     super().__init__()
-    #     c_ = int(c2 * e)  # hidden channels (c//2)
-    #
-    #     # Channel reduction: c1 → c_
-    #     self.cv_reduce = Conv(c1, c_, 1, 1)
-    #
-    #     # === Multi-Scale Dilated Asymmetric Context (MDAC) ===
-    #
-    #     # Branch L (Local): DWConv 3×3, RF = 3×3
-    #     self.branch_local = nn.Sequential(
-    #         nn.Conv2d(c_, c_, kernel_size=3, padding=1, groups=c_, bias=False),
-    #         nn.BatchNorm2d(c_),
-    #         nn.SiLU(),
-    #     )
-    #
-    #     # Branch D (Dilated): DWConv 3×3 dilation=2, RF = 7×7
-    #     self.branch_dilated = nn.Sequential(
-    #         nn.Conv2d(c_, c_, kernel_size=3, padding=2, dilation=2, groups=c_, bias=False),
-    #         nn.BatchNorm2d(c_),
-    #         nn.SiLU(),
-    #     )
-    #
-    #     # Branch A (Asymmetric): DWConv 1×5 → DWConv 5×1, RF = cross-shaped 5×5
-    #     self.branch_asym = nn.Sequential(
-    #         nn.Conv2d(c_, c_, kernel_size=(1, 5), padding=(0, 2), groups=c_, bias=False),
-    #         nn.BatchNorm2d(c_),
-    #         nn.SiLU(),
-    #         nn.Conv2d(c_, c_, kernel_size=(5, 1), padding=(2, 0), groups=c_, bias=False),
-    #         nn.BatchNorm2d(c_),
-    #         nn.SiLU(),
-    #     )
-    #
-    #     # === Context-Aware Gate ===
-    #     # Lightweight SE-style gate: AvgPool → Conv1×1 → Sigmoid
-    #     self.gate = nn.Sequential(
-    #         nn.AdaptiveAvgPool2d(1),
-    #         nn.Conv2d(c_, c_, 1, bias=True),
-    #         nn.Sigmoid(),
-    #     )
-    #
-    #     # Channel expansion: c_ → c2
-    #     self.cv_expand = Conv(c_, c2, 1, 1)
-    #
-    #     # Residual connection
-    #     self.add = shortcut and c1 == c2
-    #
-    # def forward(self, x):
-    #     """Forward pass: reduce → MDAC branches → star fusion → gate → expand → residual."""
-    #     identity = x
-    #
-    #     # 1. Channel reduction
-    #     h = self.cv_reduce(x)
-    #
-    #     # 2. Multi-Scale Dilated Asymmetric Context (MDAC)
-    #     b_local = self.branch_local(h)
-    #     b_dilated = self.branch_dilated(h)
-    #     b_asym = self.branch_asym(h)
-    #
-    #     # 3. ★ Star Operation: multiplicative cross-branch fusion
-    #     # Creates implicitly high-dimensional feature interactions
-    #     star = b_local * b_dilated * b_asym
-    #
-    #     # 4. Context-Aware Gating
-    #     gate = self.gate(star)
-    #     star = star * gate
-    #
-    #     # 5. Channel expansion
-    #     out = self.cv_expand(star)
-    #
-    #     # 6. Residual connection
-    #     return out + identity if self.add else out
-
+# import torch
+# import torch.nn as nn
+#
+# from ultralytics.nn.modules.conv import Conv, autopad
+#
+#
+# class StarFusionBottleneck(nn.Module):
+#     """
+#     StarFusion Bottleneck: Multi-Scale Dilated Asymmetric Context + Star Operation.
+#
+#     Replaces the standard 2×Conv3×3 Bottleneck with:
+#     1. Conv 1×1 (channel reduction c → c//2)
+#     2. Three parallel depthwise branches:
+#        - Branch_L: DWConv 3×3 (local texture)
+#        - Branch_D: DWConv 3×3 dilation=2 (dilated, RF=7×7)
+#        - Branch_A: DWConv 1×5 → DWConv 5×1 (asymmetric cross-shaped)
+#     3. Star Operation (★): element-wise multiplication of all three branches
+#     4. Context-Aware Gate: Sigmoid(Conv1×1(AvgPool(star_out)))
+#     5. Conv 1×1 (channel expansion c//2 → c)
+#     6. Optional residual connection
+#
+#     Args:
+#         c1 (int): Input channels.
+#         c2 (int): Output channels.
+#         shortcut (bool): Whether to use residual connection. Default True.
+#         g (int): Groups for pointwise convolutions. Default 1.
+#         e (float): Expansion ratio for hidden channels. Default 0.5.
+#     """
+#
+#     # def __init__(self, c1, c2, shortcut=True, g=1, e=0.5):
+#     #     """Initialize StarFusionBottleneck with channel reduction, MDAC branches, star fusion and gating."""
+#     #     super().__init__()
+#     #     c_ = int(c2 * e)  # hidden channels (c//2)
+#     #
+#     #     # Channel reduction: c1 → c_
+#     #     self.cv_reduce = Conv(c1, c_, 1, 1)
+#     #
+#     #     # === Multi-Scale Dilated Asymmetric Context (MDAC) ===
+#     #
+#     #     # Branch L (Local): DWConv 3×3, RF = 3×3
+#     #     self.branch_local = nn.Sequential(
+#     #         nn.Conv2d(c_, c_, kernel_size=3, padding=1, groups=c_, bias=False),
+#     #         nn.BatchNorm2d(c_),
+#     #         nn.SiLU(),
+#     #     )
+#     #
+#     #     # Branch D (Dilated): DWConv 3×3 dilation=2, RF = 7×7
+#     #     self.branch_dilated = nn.Sequential(
+#     #         nn.Conv2d(c_, c_, kernel_size=3, padding=2, dilation=2, groups=c_, bias=False),
+#     #         nn.BatchNorm2d(c_),
+#     #         nn.SiLU(),
+#     #     )
+#     #
+#     #     # Branch A (Asymmetric): DWConv 1×5 → DWConv 5×1, RF = cross-shaped 5×5
+#     #     self.branch_asym = nn.Sequential(
+#     #         nn.Conv2d(c_, c_, kernel_size=(1, 5), padding=(0, 2), groups=c_, bias=False),
+#     #         nn.BatchNorm2d(c_),
+#     #         nn.SiLU(),
+#     #         nn.Conv2d(c_, c_, kernel_size=(5, 1), padding=(2, 0), groups=c_, bias=False),
+#     #         nn.BatchNorm2d(c_),
+#     #         nn.SiLU(),
+#     #     )
+#     #
+#     #     # === Context-Aware Gate ===
+#     #     # Lightweight SE-style gate: AvgPool → Conv1×1 → Sigmoid
+#     #     self.gate = nn.Sequential(
+#     #         nn.AdaptiveAvgPool2d(1),
+#     #         nn.Conv2d(c_, c_, 1, bias=True),
+#     #         nn.Sigmoid(),
+#     #     )
+#     #
+#     #     # Channel expansion: c_ → c2
+#     #     self.cv_expand = Conv(c_, c2, 1, 1)
+#     #
+#     #     # Residual connection
+#     #     self.add = shortcut and c1 == c2
+#     #
+#     # def forward(self, x):
+#     #     """Forward pass: reduce → MDAC branches → star fusion → gate → expand → residual."""
+#     #     identity = x
+#     #
+#     #     # 1. Channel reduction
+#     #     h = self.cv_reduce(x)
+#     #
+#     #     # 2. Multi-Scale Dilated Asymmetric Context (MDAC)
+#     #     b_local = self.branch_local(h)
+#     #     b_dilated = self.branch_dilated(h)
+#     #     b_asym = self.branch_asym(h)
+#     #
+#     #     # 3. ★ Star Operation: multiplicative cross-branch fusion
+#     #     # Creates implicitly high-dimensional feature interactions
+#     #     star = b_local * b_dilated * b_asym
+#     #
+#     #     # 4. Context-Aware Gating
+#     #     gate = self.gate(star)
+#     #     star = star * gate
+#     #
+#     #     # 5. Channel expansion
+#     #     out = self.cv_expand(star)
+#     #
+#     #     # 6. Residual connection
+#     #     return out + identity if self.add else out
+#
 
 import torch
 import torch.nn as nn
