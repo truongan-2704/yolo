@@ -45,6 +45,8 @@ from .LAE import LAE, MSFM
 
 from .IDC import InceptionDWConv2d, C3k2_IDC, Bottleneck_IDC
 
+from .starfusion_block import C3k2_DCNF
+
 from .SHSA import SHSA
 
 from .EfficientNetV2 import MBConv,FusedMBConv, SE
@@ -200,5 +202,6 @@ __all__ = (
     "Index",
     "A2C2f",
     "A2C2f_SimAM",
-    "LAE"
+    "LAE",
+    "C3k2_DCNF"
 )
