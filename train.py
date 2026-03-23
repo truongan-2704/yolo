@@ -15,7 +15,7 @@ if __name__ == '__main__':
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-cbam-v2.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-EffecientNetV2/yolo11-EfficientNetV2-EMA-v2.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-EffecientNetV2/yolo11-EfficientNetV2_C2k3-DCNF-v2-P2.yaml')
-    model = YOLO(r'ultralytics/cfg/models/11/yolo11-EffecientNetV2/yolo11-EfficientNetV2_C2k3-DCNF-v3.yaml')
+    model = YOLO(r'ultralytics/cfg/models/11/yolo11-EffecientNetV2/yolo11-EfficientNetV2_C2k3-DCNF-v4.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-DCNF.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-IDC.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-EfficientNetV2-CA.yaml')
@@ -40,7 +40,7 @@ if __name__ == '__main__':
         seed=42,
         project='runs/train',
         name='exp',
-        workers=16,
+        workers=0,
         device='cpu',
         val=True
     )

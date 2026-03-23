@@ -49,6 +49,8 @@ from .starfusion_block import C3k2_DCNF
 
 from .starfusion_block_v2 import C3k2_DCNF_V2
 
+from .starfusion_block_v3 import C3k2_DCNF_V3
+
 from .SHSA import SHSA
 
 from .EfficientNetV2 import MBConv,FusedMBConv, SE
@@ -206,5 +208,6 @@ __all__ = (
     "A2C2f_SimAM",
     "LAE",
     "C3k2_DCNF",
-    "C3k2_DCNF_V2"
+    "C3k2_DCNF_V2",
+    "C3k2_DCNF_V3"
 )
