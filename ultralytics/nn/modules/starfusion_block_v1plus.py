@@ -23,27 +23,47 @@ import torch.nn as nn
 from ultralytics.nn.modules.conv import Conv
 
 
+class SpatialAttention(nn.Module):
+    """Spatial Attention Module (CS-Gate component)."""
+
+    def __init__(self, kernel_size=7):
+        """Initialize Spatial Attention with avg/max pooling and conv layer."""
+        super().__init__()
+        self.conv = nn.Conv2d(2, 1, kernel_size, padding=kernel_size // 2, bias=False)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        """Apply spatial attention by combining mean and max pooling across channels."""
+        avg_out = torch.mean(x, dim=1, keepdim=True)
+        max_out = torch.max(x, dim=1, keepdim=True)[0]
+        x_cat = torch.cat([avg_out, max_out], dim=1)
+        return self.sigmoid(self.conv(x_cat))
+
+
 class StarFusionBottleneck_V1Plus(nn.Module):
     """
-    Improved StarFusion Bottleneck with 3 novel changes over V1.
+    Improved StarFusion Bottleneck (V1++) with 3 novel enhancements:
+    1. Dynamic Pairwise Fusion: Learnable softmax weighting for RF interactions.
+    2. CS-Gate (Channel-Spatial Gate): Dual attention to preserve spatial details.
+    3. LayerScale: Scaled residual connections for deeper network stability.
 
     Architecture:
-        Input → Conv1×1 (reduce) → 3 DWConv branches (same as V1)
-        → ★ Pairwise Star Fusion (NEW: sum of pairwise products)
-        → + Input Residual (NEW: add pre-branch features)
-        → SE Bottleneck Gate (NEW: with reduction ratio)
-        → Conv1×1 (expand) → + Residual → Output
+        Input → Conv1×1 (reduce) → 3 DWConv branches
+        → ★ Dynamic Pairwise Star Fusion
+        → + Input Residual
+        → ★ CS-Gate (Channel + Spatial Attention)
+        → Conv1×1 (expand) → ★ LayerScale + Residual → Output
     """
 
     def __init__(self, c1, c2, shortcut=True, g=1, e=0.5):
-        """Initialize StarFusionBottleneck_V1Plus with pairwise star, input residual, and SE bottleneck gate."""
+        """Initialize StarFusionBottleneck_V1Plus with CS-Gate, Dynamic Fusion, and LayerScale."""
         super().__init__()
         c_ = int(c2 * e)  # hidden channels (c//2)
 
         # Channel reduction: c1 → c_
         self.cv_reduce = Conv(c1, c_, 1, 1)
 
-        # === Multi-Scale Dilated Asymmetric Context (MDAC) — same as V1 ===
+        # === Multi-Scale Dilated Asymmetric Context (MDAC) ===
 
         # Branch L (Local): DWConv 3×3, RF = 3×3
         self.branch_local = nn.Sequential(
@@ -69,31 +89,42 @@ class StarFusionBottleneck_V1Plus(nn.Module):
             nn.SiLU(),
         )
 
-        # === NEW 1: Learnable residual weight for star + input fusion ===
+        # === NEW 1: Learnable Pairwise Weights (Dynamic Star Fusion) ===
+        # Parameter to dynamically weigh the 3 pairs: (L*D), (L*A), (D*A)
+        self.pw_weights = nn.Parameter(torch.ones(3, dtype=torch.float32))
+
+        # Learnable residual weight for star + input fusion
         self.star_residual_weight = nn.Parameter(torch.tensor(0.1))
 
-        # === NEW 2: SE Bottleneck Gate with reduction ratio ===
-        # V1 used: AvgPool → Conv2d(c_, c_) → Sigmoid  [c_² params]
-        # V2 used: parameter-free / ECA Conv1d          [~0 params, too weak]
-        # V1+: AvgPool → Conv(c_, c_//4) → SiLU → Conv(c_//4, c_) → Sigmoid
+        # === NEW 2: CS-Gate (Channel-Spatial Gate) ===
         r = 4  # reduction ratio
         c_squeeze = max(c_ // r, 8)  # ensure minimum 8 channels
-        self.gate = nn.Sequential(
+        
+        # Channel Gate (SE)
+        self.channel_gate = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Conv2d(c_, c_squeeze, 1, bias=True),
             nn.SiLU(),
             nn.Conv2d(c_squeeze, c_, 1, bias=True),
             nn.Sigmoid(),
         )
+        
+        # Spatial Gate
+        self.spatial_gate = SpatialAttention(kernel_size=7)
 
         # Channel expansion: c_ → c2
         self.cv_expand = Conv(c_, c2, 1, 1)
 
-        # Residual connection (outer)
+        # === NEW 3: LayerScale for robust Residual Connection ===
         self.add = shortcut and c1 == c2
+        if self.add:
+            # Initialize LayerScale parameter with a small value (ConvNeXt style)
+            self.gamma = nn.Parameter(1e-4 * torch.ones((1, c2, 1, 1), dtype=torch.float32))
+        else:
+            self.gamma = None
 
     def forward(self, x):
-        """Forward pass: reduce → MDAC → pairwise star + residual → gate → expand → residual."""
+        """Forward pass: reduce → MDAC → dynamic pairwise star → CS-Gate → expand → LayerScale."""
         identity = x
 
         # 1. Channel reduction
@@ -104,23 +135,27 @@ class StarFusionBottleneck_V1Plus(nn.Module):
         b_dilated = self.branch_dilated(h)
         b_asym = self.branch_asym(h)
 
-        # 3. ★ NEW: Pairwise Star Fusion
-        # V1: star = b_L * b_D * b_A (triple product → gradient vanishing risk)
-        # V1+: sum of all pairwise products (richer interactions + better gradient flow)
-        star = b_local * b_dilated + b_local * b_asym + b_dilated * b_asym
+        # 3. ★ NEW: Dynamic Pairwise Star Fusion
+        w = torch.softmax(self.pw_weights, dim=0)
+        star = (w[0] * (b_local * b_dilated) + 
+                w[1] * (b_local * b_asym) + 
+                w[2] * (b_dilated * b_asym))
 
-        # 4. NEW: Star + Input Residual (prevent dead channels)
+        # 4. Star + Input Residual (prevent dead channels)
         star = star + self.star_residual_weight * h
 
-        # 5. NEW: SE Bottleneck Gating
-        gate = self.gate(star)
-        star = star * gate
+        # 5. ★ NEW: CS-Gate (Channel-Spatial Gating)
+        c_gate = self.channel_gate(star)
+        s_gate = self.spatial_gate(star)
+        
+        # Combine gates (Broadcasting applies correctly)
+        star = star * c_gate * s_gate
 
         # 6. Channel expansion
         out = self.cv_expand(star)
 
-        # 7. Residual connection (outer)
-        return out + identity if self.add else out
+        # 7. ★ NEW: Residual connection with LayerScale
+        return self.gamma * out + identity if self.add else out
 
 
 class C3k2_DCNF_V1Plus(nn.Module):
