@@ -1,3 +1,14 @@
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
+"""
+C3k2_DCNF_V2: Partial StarFusion Block — Version 2 (Optimized)
+===============================================================
+Optimizations applied:
+1. Inplace SiLU for all branches → reduced peak memory
+2. Optimized _param_free_gate: fused variance computation, single pow(2) call
+3. Cleaner channel shuffle with safety guard
+4. Consistent deploy mode support with reparameterization
+"""
+
 import torch
 import torch.nn as nn
 from ultralytics.nn.modules.conv import Conv
@@ -21,14 +32,14 @@ class PartialStarFusionBottleneck(nn.Module):
             nn.Conv2d(self.c_star, self.c_star, kernel_size=3, padding=1,
                       groups=self.c_star, bias=False),
             nn.BatchNorm2d(self.c_star),
-            nn.SiLU(),
+            nn.SiLU(inplace=True),
         )
 
         # === Branch Local: learnable channel-wise scale on shared base ===
         self.local_scale = nn.Parameter(torch.ones(1, self.c_star, 1, 1))
 
         # === Branch Context: dilated + large-kernel on shared base ===
-        self.deploy = False  # Flag đánh dấu trạng thái Deploy
+        self.deploy = False  # Flag for deploy mode
 
         # Sub-branch 1: DWConv 3×3 dilation=2 (RF=7×7)
         self.ctx_dilated = nn.Sequential(
@@ -44,7 +55,7 @@ class PartialStarFusionBottleneck(nn.Module):
             nn.BatchNorm2d(self.c_star),
         )
 
-        self.ctx_act = nn.SiLU()
+        self.ctx_act = nn.SiLU(inplace=True)
 
         # === Star Operation Stabilizer ===
         self.star_bn = nn.BatchNorm2d(self.c_star)
@@ -58,21 +69,20 @@ class PartialStarFusionBottleneck(nn.Module):
     def _channel_shuffle(x, groups=2):
         """Channel shuffle operation for cross-group information flow."""
         b, c, h, w = x.shape
+        if c % groups != 0:
+            return x
         x = x.view(b, groups, c // groups, h, w)
         x = x.transpose(1, 2).contiguous()
         return x.view(b, c, h, w)
 
     @staticmethod
     def _param_free_gate(x):
-        """Parameter-free spatial-channel joint gate (SimAM-inspired)."""
+        """Parameter-free spatial-channel joint gate (SimAM-inspired, optimized)."""
         mu = x.mean(dim=[2, 3], keepdim=True)  # [B, C, 1, 1]
-
-        # TỐI ƯU 1: Tính phương sai thủ công, khắc phục hoàn toàn lỗi "degrees of freedom <= 0"
-        var = (x - mu).pow(2).mean(dim=[2, 3], keepdim=True) + 1e-5  # [B, C, 1, 1]
-
-        energy = (x - mu).pow(2) / var
-        gate = torch.sigmoid(-energy + 1.0)
-        return x * gate
+        diff = x - mu
+        var = diff.pow(2).mean(dim=[2, 3], keepdim=True) + 1e-5  # [B, C, 1, 1]
+        energy = diff.pow(2) / var
+        return x * torch.sigmoid(1.0 - energy)
 
     def forward(self, x):
         identity = x
@@ -82,7 +92,7 @@ class PartialStarFusionBottleneck(nn.Module):
         base = self.shared_dw(h_star)
         local_feat = base * self.local_scale
 
-        # TỐI ƯU 2: Nhánh Context sẽ đi qua 1 lớp Conv duy nhất nếu đang ở chế độ deploy
+        # Context branch: fused single Conv in deploy mode
         if self.deploy:
             ctx_feat = self.ctx_fused(base)
         else:
@@ -101,47 +111,46 @@ class PartialStarFusionBottleneck(nn.Module):
         return out + identity if self.add else out
 
     def _fuse_conv_bn(self, conv, bn):
-        """Hàm phụ trợ: Gộp trọng số của Conv và BatchNorm thành Conv có Bias."""
+        """Fuse Conv and BatchNorm weights into a single Conv with bias."""
         w = conv.weight
         mean = bn.running_mean
         var_sqrt = torch.sqrt(bn.running_var + bn.eps)
         gamma = bn.weight
         beta = bn.bias
 
-        # Tính toán trọng số và bias sau khi gộp
         w_fused = w * (gamma / var_sqrt).reshape(-1, 1, 1, 1)
         b_fused = -mean * gamma / var_sqrt + beta
         return w_fused, b_fused
 
     def switch_to_deploy(self):
         """
-        Gộp nhánh ctx_dilated và ctx_large thành một lớp Conv 5x5 duy nhất.
-        Được gọi tự động khi export model (ONNX, TensorRT).
+        Fuse ctx_dilated and ctx_large into a single 5x5 DWConv.
+        Called automatically when exporting model (ONNX, TensorRT).
         """
         if self.deploy:
             return
 
-        # Gộp Conv+BN của nhánh 5x5
+        # Fuse Conv+BN of 5x5 branch
         w_large, b_large = self._fuse_conv_bn(self.ctx_large[0], self.ctx_large[1])
 
-        # Gộp Conv+BN của nhánh 3x3 dilated
+        # Fuse Conv+BN of 3x3 dilated branch
         w_dilated_3x3, b_dilated = self._fuse_conv_bn(self.ctx_dilated[0], self.ctx_dilated[1])
 
-        # Padding trọng số của nhánh dilated (từ 3x3 dilation=2 lên 5x5 dilation=1)
+        # Pad dilated 3x3 weights to 5x5 equivalent
         w_dilated_5x5 = torch.zeros_like(w_large)
         w_dilated_5x5[:, :, 0::2, 0::2] = w_dilated_3x3
 
-        # Cộng dồn trọng số và bias của 2 nhánh
+        # Sum weights and biases
         w_fused = w_large + w_dilated_5x5
         b_fused = b_large + b_dilated
 
-        # Khởi tạo lớp Conv mới để thay thế
+        # Create fused Conv layer
         self.ctx_fused = nn.Conv2d(self.c_star, self.c_star, kernel_size=5, padding=2,
                                    groups=self.c_star, bias=True)
         self.ctx_fused.weight.data = w_fused
         self.ctx_fused.bias.data = b_fused
 
-        # Đánh dấu trạng thái và xóa các nhánh thừa để giải phóng RAM
+        # Mark deploy and free original branches
         self.deploy = True
         del self.ctx_large
         del self.ctx_dilated
