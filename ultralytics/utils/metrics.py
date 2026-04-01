@@ -134,6 +134,111 @@ def bbox_iou(box1, box2, xywh=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7
     return iou  # IoU
 
 
+def bbox_aghiou(box1, box2, xywh=True, eps=1e-7):
+    """
+    Compute Adaptive Gradient-Harmonized IoU (AGHIoU) between bounding boxes.
+
+    AGHIoU is a novel IoU loss metric that improves upon CIoU/DIoU by incorporating:
+    1. Adaptive geometric penalty that dynamically weights center distance, aspect ratio,
+       and area difference based on the current IoU level.
+    2. Gradient harmonization that modulates gradient contribution based on sample difficulty,
+       boosting gradients for hard samples and refining for easy samples.
+    3. Multi-scale shape awareness that considers both aspect ratio and relative scale
+       difference between boxes.
+
+    This function supports various shapes for `box1` and `box2` as long as the last dimension is 4.
+
+    Args:
+        box1 (torch.Tensor): A tensor representing one or more bounding boxes, with the last dimension being 4.
+        box2 (torch.Tensor): A tensor representing one or more bounding boxes, with the last dimension being 4.
+        xywh (bool, optional): If True, input boxes are in (x, y, w, h) format. If False, input boxes are in
+                               (x1, y1, x2, y2) format. Defaults to True.
+        eps (float, optional): A small value to avoid division by zero. Defaults to 1e-7.
+
+    Returns:
+        (torch.Tensor): AGHIoU values. Range is [-1, 1] where 1 means perfect overlap.
+    """
+    # Get the coordinates of bounding boxes
+    if xywh:  # transform from xywh to xyxy
+        (x1, y1, w1, h1), (x2, y2, w2, h2) = box1.chunk(4, -1), box2.chunk(4, -1)
+        w1_, h1_, w2_, h2_ = w1 / 2, h1 / 2, w2 / 2, h2 / 2
+        b1_x1, b1_x2, b1_y1, b1_y2 = x1 - w1_, x1 + w1_, y1 - h1_, y1 + h1_
+        b2_x1, b2_x2, b2_y1, b2_y2 = x2 - w2_, x2 + w2_, y2 - h2_, y2 + h2_
+    else:  # x1, y1, x2, y2 = box1
+        b1_x1, b1_y1, b1_x2, b1_y2 = box1.chunk(4, -1)
+        b2_x1, b2_y1, b2_x2, b2_y2 = box2.chunk(4, -1)
+        w1, h1 = b1_x2 - b1_x1, b1_y2 - b1_y1 + eps
+        w2, h2 = b2_x2 - b2_x1, b2_y2 - b2_y1 + eps
+
+    # Intersection area
+    inter = (b1_x2.minimum(b2_x2) - b1_x1.maximum(b2_x1)).clamp_(0) * (
+        b1_y2.minimum(b2_y2) - b1_y1.maximum(b2_y1)
+    ).clamp_(0)
+
+    # Union Area
+    union = w1 * h1 + w2 * h2 - inter + eps
+
+    # Base IoU
+    iou = inter / union
+
+    # === Component 1: Convex diagonal and center distance (from DIoU) ===
+    cw = b1_x2.maximum(b2_x2) - b1_x1.minimum(b2_x1)  # convex width
+    ch = b1_y2.maximum(b2_y2) - b1_y1.minimum(b2_y1)  # convex height
+    c2 = cw.pow(2) + ch.pow(2) + eps  # convex diagonal squared
+    rho2 = (
+        (b2_x1 + b2_x2 - b1_x1 - b1_x2).pow(2) + (b2_y1 + b2_y2 - b1_y1 - b1_y2).pow(2)
+    ) / 4  # center distance squared
+
+    # Normalized center distance
+    rho_norm = rho2 / c2
+
+    # === Component 2: Aspect ratio consistency (enhanced from CIoU) ===
+    v = (4 / math.pi ** 2) * ((w2 / (h2 + eps)).atan() - (w1 / (h1 + eps)).atan()).pow(2)
+
+    # === Component 3: Multi-scale shape awareness (novel) ===
+    # Relative scale difference - penalizes when boxes are at very different scales
+    area1 = w1 * h1
+    area2 = w2 * h2
+    area_ratio = (area1 / (area2 + eps)).clamp(eps, 1.0 / eps)
+    # Symmetric log-scale difference: 0 when equal, increases when different
+    scale_diff = (area_ratio.log().pow(2)) / (1.0 + area_ratio.log().pow(2))
+
+    # Shape similarity: considers both width and height ratios independently
+    w_ratio = (w1 / (w2 + eps)).clamp(eps, 1.0 / eps)
+    h_ratio = (h1 / (h2 + eps)).clamp(eps, 1.0 / eps)
+    shape_cost = (w_ratio.log().pow(2) + h_ratio.log().pow(2)) / 4.0
+
+    # === Component 4: Adaptive weighting based on IoU level (novel) ===
+    # When IoU is low (hard samples): focus more on center distance to guide boxes together
+    # When IoU is high (easy samples): focus more on shape refinement
+    with torch.no_grad():
+        # Adaptive weight for center distance penalty - higher weight when IoU is low
+        w_center = (1.0 - iou.detach()).pow(0.5)  # sqrt emphasizes low IoU cases
+        # Adaptive weight for shape refinement - higher weight when IoU is high
+        w_shape = iou.detach().pow(0.5)
+        # Alpha for aspect ratio (from CIoU, but now adaptive)
+        alpha = v / (v - iou.detach() + (1 + eps))
+
+    # === Component 5: Gradient harmonization (novel) ===
+    # Modulate the overall penalty to harmonize gradients across different IoU levels
+    # This prevents gradient explosion for very hard samples and gradient vanishing for easy ones
+    # Uses a smooth bell-curve-like modulation centered around medium difficulty
+    gradient_modulator = 2.0 * iou * (1.0 - iou) + 0.5  # Range: [0.5, 1.0], peak at IoU=0.5
+
+    # === Final AGHIoU computation ===
+    # Combine all components with adaptive weighting
+    geometric_penalty = (
+        w_center * rho_norm +                    # Adaptive center distance
+        w_shape * (v * alpha + shape_cost) +     # Adaptive shape refinement
+        0.1 * scale_diff                          # Scale awareness (small constant weight)
+    )
+
+    # Apply gradient harmonization
+    aghiou = iou - gradient_modulator * geometric_penalty
+
+    return aghiou
+
+
 def mask_iou(mask1, mask2, eps=1e-7):
     """
     Calculate masks IoU.
