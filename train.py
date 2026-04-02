@@ -43,5 +43,6 @@ if __name__ == '__main__':
         name='exp',
         workers=0,
         device='cpu',
-        val=True
+        val=True,
+        loss_type="aghiou",
     )

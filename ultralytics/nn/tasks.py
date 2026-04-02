@@ -100,8 +100,10 @@ from ultralytics.utils import DEFAULT_CFG_DICT, DEFAULT_CFG_KEYS, LOGGER, colors
 from ultralytics.utils.checks import check_requirements, check_suffix, check_yaml
 from ultralytics.utils.loss import (
     E2EDetectLoss,
+    E2EAGHIoUDetectLoss,
     v8ClassificationLoss,
     v8DetectionLoss,
+    v8AGHIoUDetectionLoss,
     v8OBBLoss,
     v8PoseLoss,
     v8SegmentationLoss,
@@ -417,8 +419,16 @@ class DetectionModel(BaseModel):
         return y
 
     def init_criterion(self):
-        """Initialize the loss criterion for the DetectionModel."""
-        return E2EDetectLoss(self) if getattr(self, "end2end", False) else v8DetectionLoss(self)
+        """Initialize the loss criterion for the DetectionModel.
+
+        Supports selecting AGHIoU loss by setting `loss_type='aghiou'` in training args.
+        Default uses the standard CIoU-based loss.
+        """
+        use_aghiou = getattr(self.args, "loss_type", "ciou").lower() == "aghiou" if hasattr(self, "args") else False
+
+        if getattr(self, "end2end", False):
+            return E2EAGHIoUDetectLoss(self) if use_aghiou else E2EDetectLoss(self)
+        return v8AGHIoUDetectionLoss(self) if use_aghiou else v8DetectionLoss(self)
 
 
 class OBBModel(DetectionModel):

@@ -113,6 +113,54 @@ class BboxLoss(nn.Module):
         return loss_iou, loss_dfl
 
 
+class AGHIoUBboxLoss(nn.Module):
+    """
+    Criterion class for computing bounding box training losses using AGHIoU.
+
+    Adaptive Gradient-Harmonized IoU (AGHIoU) Loss provides improved convergence over CIoU by:
+    - Dynamically adjusting penalty weights based on current IoU level
+    - Harmonizing gradients across different difficulty levels
+    - Multi-scale shape awareness for better handling of scale variance
+
+    Attributes:
+        dfl_loss (DFLoss | None): Distribution Focal Loss instance for regression, or None if reg_max <= 1.
+    """
+
+    def __init__(self, reg_max=16):
+        """Initialize the AGHIoUBboxLoss module with regularization maximum and DFL settings."""
+        super().__init__()
+        self.dfl_loss = DFLoss(reg_max) if reg_max > 1 else None
+
+    def forward(self, pred_dist, pred_bboxes, anchor_points, target_bboxes, target_scores, target_scores_sum, fg_mask):
+        """Compute AGHIoU loss and DFL loss for bounding box regression.
+
+        Args:
+            pred_dist (torch.Tensor): Predicted distance distributions, shape (B, N, 4*reg_max).
+            pred_bboxes (torch.Tensor): Predicted bounding boxes, shape (B, N, 4) in xyxy format.
+            anchor_points (torch.Tensor): Anchor points, shape (N, 2).
+            target_bboxes (torch.Tensor): Target bounding boxes, shape (B, N, 4) in xyxy format.
+            target_scores (torch.Tensor): Target scores, shape (B, N, C).
+            target_scores_sum (float): Sum of target scores for normalization.
+            fg_mask (torch.Tensor): Foreground mask, shape (B, N).
+
+        Returns:
+            (tuple[torch.Tensor, torch.Tensor]): AGHIoU loss and DFL loss.
+        """
+        weight = target_scores.sum(-1)[fg_mask].unsqueeze(-1)
+        iou = bbox_aghiou(pred_bboxes[fg_mask], target_bboxes[fg_mask], xywh=False)
+        loss_iou = ((1.0 - iou) * weight).sum() / target_scores_sum
+
+        # DFL loss
+        if self.dfl_loss:
+            target_ltrb = bbox2dist(anchor_points, target_bboxes, self.dfl_loss.reg_max - 1)
+            loss_dfl = self.dfl_loss(pred_dist[fg_mask].view(-1, self.dfl_loss.reg_max), target_ltrb[fg_mask]) * weight
+            loss_dfl = loss_dfl.sum() / target_scores_sum
+        else:
+            loss_dfl = torch.tensor(0.0).to(pred_dist.device)
+
+        return loss_iou, loss_dfl
+
+
 class RotatedBboxLoss(BboxLoss):
     """Criterion class for computing training losses during training."""
 
@@ -258,6 +306,28 @@ class v8DetectionLoss:
         loss[2] *= self.hyp.dfl  # dfl gain
 
         return loss.sum() * batch_size, loss.detach()  # loss(box, cls, dfl)
+
+
+class v8AGHIoUDetectionLoss(v8DetectionLoss):
+    """
+    Detection loss using Adaptive Gradient-Harmonized IoU (AGHIoU).
+
+    This class extends v8DetectionLoss by replacing the standard CIoU-based BboxLoss
+    with AGHIoUBboxLoss, which provides:
+    - Adaptive geometric penalty weighting based on IoU level
+    - Gradient harmonization for balanced training across difficulty levels
+    - Multi-scale shape awareness for better scale variance handling
+
+    Usage:
+        Replace v8DetectionLoss with v8AGHIoUDetectionLoss in model's init_criterion().
+    """
+
+    def __init__(self, model, tal_topk=10):
+        """Initialize v8AGHIoUDetectionLoss with AGHIoU-based bbox loss."""
+        super().__init__(model, tal_topk)
+        # Replace the standard BboxLoss with AGHIoUBboxLoss
+        m = model.model[-1]  # Detect() module
+        self.bbox_loss = AGHIoUBboxLoss(m.reg_max).to(self.device)
 
 
 class v8SegmentationLoss(v8DetectionLoss):
@@ -732,6 +802,27 @@ class E2EDetectLoss:
         """Initialize E2EDetectLoss with one-to-many and one-to-one detection losses using the provided model."""
         self.one2many = v8DetectionLoss(model, tal_topk=10)
         self.one2one = v8DetectionLoss(model, tal_topk=1)
+
+    def __call__(self, preds, batch):
+        """Calculate the sum of the loss for box, cls and dfl multiplied by batch size."""
+        preds = preds[1] if isinstance(preds, tuple) else preds
+        one2many = preds["one2many"]
+        loss_one2many = self.one2many(one2many, batch)
+        one2one = preds["one2one"]
+        loss_one2one = self.one2one(one2one, batch)
+        return loss_one2many[0] + loss_one2one[0], loss_one2many[1] + loss_one2one[1]
+
+
+class E2EAGHIoUDetectLoss:
+    """Criterion class for computing E2E training losses using AGHIoU.
+
+    Uses AGHIoU-based detection loss for both one-to-many and one-to-one branches.
+    """
+
+    def __init__(self, model):
+        """Initialize E2EAGHIoUDetectLoss with AGHIoU-based one-to-many and one-to-one detection losses."""
+        self.one2many = v8AGHIoUDetectionLoss(model, tal_topk=10)
+        self.one2one = v8AGHIoUDetectionLoss(model, tal_topk=1)
 
     def __call__(self, preds, batch):
         """Calculate the sum of the loss for box, cls and dfl multiplied by batch size."""
