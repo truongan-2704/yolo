@@ -11,7 +11,7 @@ from ultralytics.data import build_dataloader, build_yolo_dataset
 from ultralytics.engine.trainer import BaseTrainer
 from ultralytics.models import yolo
 from ultralytics.nn.tasks import DetectionModel
-from ultralytics.utils import LOGGER, RANK
+from ultralytics.utils import LOGGER, RANK, colorstr
 from ultralytics.utils.plotting import plot_images, plot_labels, plot_results
 from ultralytics.utils.torch_utils import de_parallel, torch_distributed_zero_first
 
@@ -82,6 +82,11 @@ class DetectionTrainer(BaseTrainer):
         self.model.names = self.data["names"]  # attach class names to model
         self.model.args = self.args  # attach hyperparameters to model
         # TODO: self.model.class_weights = labels_to_class_weights(dataset.labels, nc).to(device) * nc
+
+        # Log which IoU loss type is being used
+        loss_type = getattr(self.args, "loss_type", "ciou").lower()
+        iou_name = "AGHIoU" if loss_type == "aghiou" else "CIoU"
+        LOGGER.info(f"{colorstr('IoU loss type:')} {colorstr('bold', iou_name)}")
 
     def get_model(self, cfg=None, weights=None, verbose=True):
         """Return a YOLO detection model."""
