@@ -55,9 +55,13 @@ from .starfusion_block_v1plus import C3k2_DCNF_V1Plus
 
 from .starfusion_block_v4 import C3k2_DCNF_V4
 
+from .starfusion_block_v5 import C3k2_DCNF_V5
+
 from .SHSA import SHSA
 
 from .EfficientNetV2 import MBConv,FusedMBConv, SE
+
+from .EfficientNetV2_v2 import MBConvV2, FusedMBConvV2, SEv2, FeatureAlign
 
 from .block import (
     C1,
@@ -215,5 +219,10 @@ __all__ = (
     "C3k2_DCNF_V2",
     "C3k2_DCNF_V3",
     "C3k2_DCNF_V1Plus",
-    "C3k2_DCNF_V4"
+    "C3k2_DCNF_V4",
+    "C3k2_DCNF_V5",
+    "MBConvV2",
+    "FusedMBConvV2",
+    "SEv2",
+    "FeatureAlign",
 )

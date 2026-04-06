@@ -89,7 +89,12 @@ from ultralytics.nn.modules import (
     C3k2_DCNF_V2,
     C3k2_DCNF_V3,
     C3k2_DCNF_V1Plus,
-    C3k2_DCNF_V4
+    C3k2_DCNF_V4,
+    C3k2_DCNF_V5,
+    MBConvV2,
+    FusedMBConvV2,
+    SEv2,
+    FeatureAlign,
 )
 
 
@@ -1072,7 +1077,11 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             C3k2_DCNF_V2,
             C3k2_DCNF_V3,
             C3k2_DCNF_V1Plus,
-            C3k2_DCNF_V4
+            C3k2_DCNF_V4,
+            C3k2_DCNF_V5,
+            FusedMBConvV2,
+            MBConvV2,
+            FeatureAlign,
 
         }:
             c1, c2 = ch[f], args[0]
@@ -1108,11 +1117,14 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
                 C3k2_DCNF_V2,
                 C3k2_DCNF_V3,
                 C3k2_DCNF_V1Plus,
-                C3k2_DCNF_V4
+                C3k2_DCNF_V4,
+                C3k2_DCNF_V5,
+                FusedMBConvV2,
+                MBConvV2,
             }:
                 args.insert(2, n)  # number of repeats
                 n = 1
-            if m in {C3k2, C3k2_CBAM, C3k2_DCNF, C3k2_DCNF_V2, C3k2_DCNF_V3, C3k2_DCNF_V1Plus, C3k2_DCNF_V4}:  # Áp dụng cho C3k2 gốc, CBAM, DCNF và DCNF_V2
+            if m in {C3k2, C3k2_CBAM, C3k2_DCNF, C3k2_DCNF_V2, C3k2_DCNF_V3, C3k2_DCNF_V1Plus, C3k2_DCNF_V4, C3k2_DCNF_V5}:  # Áp dụng cho C3k2 gốc, CBAM, DCNF và DCNF_V2, V5
                 legacy = False
                 if scale in "mlx":
                     args[3] = True  # Bật tham số c3k=True cho các bản M/L/X
