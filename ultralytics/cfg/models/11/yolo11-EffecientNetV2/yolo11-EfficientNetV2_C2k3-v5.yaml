@@ -1,0 +1,56 @@
+# Ultralytics YOLO 🚀, AGPL-3.0 license
+# YOLO11 + EfficientNetV2 v2 Backbone + C3k2_DCNF_V5 (Speed-Accuracy Optimized)
+# =================================================================================
+# V5 Key optimizations:
+# - EfficientNetV2_v2: Sigmoid SE (accuracy) + nn.Sequential (runtime optimization)
+# - C3k2_DCNF_V5: GroupConv g=c_//16 (GPU-efficient) + 2 branches (fewer ops)
+#                  + Hybrid Star (gradient highway) + SE Sigmoid (consistent attention)
+
+nc: 80
+scales:
+  n: [0.50, 0.25, 1024]
+  s: [0.50, 0.50, 1024]
+  m: [0.50, 1.00, 512]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.50, 512]
+
+backbone:
+  # [from, repeats, module, args]
+  # Stage 0: Stem
+  - [-1, 1, Conv, [64, 3, 2]]              # 0-P1/2
+  # Stage 1: Fused-MBConv v2 (L=2, expand=1)
+  - [-1, 1, FusedMBConvV2, [64, 1, 1]]     # 1-P1/2
+  # Stage 2: Fused-MBConv v2 (L=4, expand=4, stride=2)
+  - [-1, 2, FusedMBConvV2, [128, 2, 4]]    # 2-P2/4
+  # Stage 3: Fused-MBConv v2 (L=4, expand=4, stride=2) → P3
+  - [-1, 2, FusedMBConvV2, [256, 2, 4]]    # 3-P3/8
+  # Stage 4: MBConv v2 (L=6, expand=4, stride=2) → P4
+  - [-1, 3, MBConvV2, [512, 2, 4]]         # 4-P4/16
+  # Stage 5: MBConv v2 (L=9, expand=4, stride=1)
+  - [-1, 2, MBConvV2, [512, 1, 4]]         # 5-P4/16
+  # Stage 6: MBConv v2 (L=15, expand=6, stride=2) → P5
+  - [-1, 2, MBConvV2, [1024, 2, 6]]        # 6-P5/32
+  # SPPF for global context
+  - [-1, 1, SPPF, [1024, 5]]               # 7-P5/32
+
+head:
+  # -------- Top-down pathway --------
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]  # 8 (P4/16)
+  - [[-1, 5], 1, Concat, [1]]                   # 9 cat backbone P4 (Layer 5)
+  - [-1, 2, C3k2, [512, False]]          # 10 (P4-medium)
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]  # 11 (P3/8)
+  - [[-1, 3], 1, Concat, [1]]                   # 12 cat backbone P3 (Layer 3)
+  - [-1, 3, C3k2, [256, False]]          # 13 (P3-small)
+
+  # -------- Bottom-up pathway --------
+  - [-1, 1, Conv, [256, 3, 2]]                  # 14 (P4/16)
+  - [[-1, 10], 1, Concat, [1]]                  # 15 cat head P4
+  - [-1, 2, C3k2, [512, False]]          # 16 (P4-medium)
+
+  - [-1, 1, Conv, [512, 3, 2]]                  # 17 (P5/32)
+  - [[-1, 7], 1, Concat, [1]]                   # 18 cat backbone P5 (SPPF)
+  - [-1, 2, C3k2, [1024, True]]          # 19 (P5-large)
+
+  # Detect
+  - [[13, 16, 19], 1, Detect, [nc]]             # 20 Detect(P3, P4, P5)
