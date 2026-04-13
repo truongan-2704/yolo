@@ -1,0 +1,81 @@
+# Ultralytics YOLO 🚀, AGPL-3.0 license
+# ═══════════════════════════════════════════════════════════════════════════
+# YOLO-EDGE: Efficient Lightweight Detection with Gated Evolution
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Novel hybrid architecture combining:
+#   Backbone: C3k2_Faster (PConv from FasterNet CVPR'23) — ultra-efficient spatial features
+#   Neck:     VoVGSCSP (GSConv from SlimNeck) — efficient feature fusion
+#   Head:     Standard Detect (P3, P4, P5) — proven anchor-free detection
+#
+# Design Philosophy:
+#   - Backbone needs SPEED → PConv processes only 1/4 channels spatially (~5.8× fewer FLOPs)
+#   - Neck needs ACCURACY → GSConv (Conv+DWConv+Shuffle) balances efficiency & representation
+#   - Head stays PROVEN → no changes needed, YOLO detect head is already efficient
+#
+# Expected Benefits vs YOLO11:
+#   - 30-50% fewer parameters
+#   - 40-60% fewer FLOPs in bottleneck operations
+#   - Comparable or better mAP (PConv + GSConv proven on COCO)
+#   - Fully ONNX/TensorRT compatible
+#
+# Scaling System: n/s/m/l/x (same as YOLO11)
+#   n: nano   — mobile/edge deployment
+#   s: small  — balanced speed-accuracy
+#   m: medium — standard
+#   l: large  — high accuracy
+#   x: xlarge — maximum accuracy
+
+nc: 80
+scales:
+  # [depth_mul, width_mul, max_channels]
+  n: [0.50, 0.25, 1024]   # YOLO-EDGE-n: ~1M params, ultra-fast
+  s: [0.50, 0.50, 1024]   # YOLO-EDGE-s: ~3M params, fast
+  m: [0.50, 1.00, 512]    # YOLO-EDGE-m: ~8M params, balanced
+  l: [1.00, 1.00, 512]    # YOLO-EDGE-l: ~15M params, accurate
+  x: [1.00, 1.50, 512]    # YOLO-EDGE-x: ~25M params, max accuracy
+
+backbone:
+  # [from, repeats, module, args]
+
+  # ── Stage 0: Stem ──
+  - [-1, 1, Conv, [64, 3, 2]]                  # 0-P1/2   Stem 3×3 Conv
+
+  # ── Stage 1: P1 → P2 ──
+  - [-1, 1, Conv, [128, 3, 2]]                 # 1-P2/4   Downsample
+  - [-1, 2, C3k2_Faster, [128, False]]         # 2-P2/4   PConv block ×2
+
+  # ── Stage 2: P2 → P3 (small objects) ──
+  - [-1, 1, Conv, [256, 3, 2]]                 # 3-P3/8   Downsample
+  - [-1, 2, C3k2_Faster, [256, False]]         # 4-P3/8   PConv block ×2
+
+  # ── Stage 3: P3 → P4 (medium objects) ──
+  - [-1, 1, Conv, [512, 3, 2]]                 # 5-P4/16  Downsample
+  - [-1, 2, C3k2_Faster, [512, False]]         # 6-P4/16  PConv block ×2
+
+  # ── Stage 4: P4 → P5 (large objects) ──
+  - [-1, 1, Conv, [1024, 3, 2]]                # 7-P5/32  Downsample
+  - [-1, 2, C3k2_Faster, [1024, True]]         # 8-P5/32  PConv block ×2 (c3k=True for larger RF)
+  - [-1, 1, SPPF, [1024, 5]]                   # 9-P5/32  Spatial Pyramid Pooling
+
+head:
+  # ════════════════════════ FPN: Top-Down Pathway ════════════════════════
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]     # 10 Upsample P5→P4 size
+  - [[-1, 6], 1, Concat, [1]]                       # 11 Concat with backbone P4
+  - [-1, 2, VoVGSCSP, [512, False]]                 # 12 GSConv fusion (P4)
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]     # 13 Upsample P4→P3 size
+  - [[-1, 4], 1, Concat, [1]]                       # 14 Concat with backbone P3
+  - [-1, 3, VoVGSCSP, [256, False]]                 # 15 GSConv fusion (P3) — more repeats for small objects
+
+  # ════════════════════════ PAN: Bottom-Up Pathway ════════════════════════
+  - [-1, 1, Conv, [256, 3, 2]]                      # 16 Downsample P3→P4
+  - [[-1, 12], 1, Concat, [1]]                      # 17 Concat with FPN P4
+  - [-1, 2, VoVGSCSP, [512, False]]                 # 18 GSConv fusion (P4)
+
+  - [-1, 1, Conv, [512, 3, 2]]                      # 19 Downsample P4→P5
+  - [[-1, 9], 1, Concat, [1]]                       # 20 Concat with backbone P5 (SPPF)
+  - [-1, 2, VoVGSCSP, [1024, True]]                 # 21 GSConv fusion (P5)
+
+  # ════════════════════════ Detection Head ════════════════════════
+  - [[15, 18, 21], 1, Detect, [nc]]                 # 22 Detect(P3, P4, P5)

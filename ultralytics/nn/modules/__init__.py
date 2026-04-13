@@ -59,6 +59,14 @@ from .starfusion_block_v5 import C3k2_DCNF_V5
 
 from .starfusion_block_v6 import C3k2_DCNF_V6
 
+from .edge_blocks import PConv, FasterBottleneck, C3k2_Faster, GSConv, GSBottleneck, VoVGSCSP
+
+from .phoenix_blocks import HeteroConv, DualPoolGate, PhoenixBottleneck, C3k2_Phoenix, PhoenixCSP
+
+from .chimera_blocks import TridentConv, SpectralGate, ChimeraBottleneck, C3k2_Chimera, ChimeraCSP, CrossScaleModulator
+
+from .nexus_blocks import OmniDirConv, NormRatioGate, NexusBottleneck, C3k2_Nexus, NexusCSP, PolarizedRefine
+
 from .SHSA import SHSA
 
 from .EfficientNetV2 import MBConv,FusedMBConv, SE
@@ -228,4 +236,27 @@ __all__ = (
     "FusedMBConvV2",
     "SEv2",
     "FeatureAlign",
+    "PConv",
+    "FasterBottleneck",
+    "C3k2_Faster",
+    "GSConv",
+    "GSBottleneck",
+    "VoVGSCSP",
+    "HeteroConv",
+    "DualPoolGate",
+    "PhoenixBottleneck",
+    "C3k2_Phoenix",
+    "PhoenixCSP",
+    "TridentConv",
+    "SpectralGate",
+    "ChimeraBottleneck",
+    "C3k2_Chimera",
+    "ChimeraCSP",
+    "CrossScaleModulator",
+    "OmniDirConv",
+    "NormRatioGate",
+    "NexusBottleneck",
+    "C3k2_Nexus",
+    "NexusCSP",
+    "PolarizedRefine",
 )

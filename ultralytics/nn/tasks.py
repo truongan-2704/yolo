@@ -96,6 +96,29 @@ from ultralytics.nn.modules import (
     FusedMBConvV2,
     SEv2,
     FeatureAlign,
+    PConv,
+    FasterBottleneck,
+    C3k2_Faster,
+    GSConv,
+    GSBottleneck,
+    VoVGSCSP,
+    HeteroConv,
+    DualPoolGate,
+    PhoenixBottleneck,
+    C3k2_Phoenix,
+    PhoenixCSP,
+    TridentConv,
+    SpectralGate,
+    ChimeraBottleneck,
+    C3k2_Chimera,
+    ChimeraCSP,
+    CrossScaleModulator,
+    OmniDirConv,
+    NormRatioGate,
+    NexusBottleneck,
+    C3k2_Nexus,
+    NexusCSP,
+    PolarizedRefine,
 )
 
 
@@ -1084,6 +1107,15 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             FusedMBConvV2,
             MBConvV2,
             FeatureAlign,
+            C3k2_Faster,
+            VoVGSCSP,
+            GSConv,
+            C3k2_Phoenix,
+            PhoenixCSP,
+            C3k2_Chimera,
+            ChimeraCSP,
+            C3k2_Nexus,
+            NexusCSP,
 
         }:
             c1, c2 = ch[f], args[0]
@@ -1124,10 +1156,18 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
                 C3k2_DCNF_V6,
                 FusedMBConvV2,
                 MBConvV2,
+                C3k2_Faster,
+                VoVGSCSP,
+                C3k2_Phoenix,
+                PhoenixCSP,
+                C3k2_Chimera,
+                ChimeraCSP,
+                C3k2_Nexus,
+                NexusCSP,
             }:
                 args.insert(2, n)  # number of repeats
                 n = 1
-            if m in {C3k2, C3k2_CBAM, C3k2_DCNF, C3k2_DCNF_V2, C3k2_DCNF_V3, C3k2_DCNF_V1Plus, C3k2_DCNF_V4, C3k2_DCNF_V5, C3k2_DCNF_V6}:  # Áp dụng cho C3k2 gốc, CBAM, DCNF và DCNF_V2, V5
+            if m in {C3k2, C3k2_CBAM, C3k2_DCNF, C3k2_DCNF_V2, C3k2_DCNF_V3, C3k2_DCNF_V1Plus, C3k2_DCNF_V4, C3k2_DCNF_V5, C3k2_DCNF_V6, C3k2_Faster, VoVGSCSP, C3k2_Phoenix, PhoenixCSP, C3k2_Chimera, ChimeraCSP, C3k2_Nexus, NexusCSP}:  # Áp dụng cho C3k2 gốc, CBAM, DCNF và DCNF_V2, V5, EDGE, Phoenix, Chimera, Nexus
                 legacy = False
                 if scale in "mlx":
                     args[3] = True  # Bật tham số c3k=True cho các bản M/L/X
