@@ -73,6 +73,12 @@ from .EfficientNetV2 import MBConv,FusedMBConv, SE
 
 from .EfficientNetV2_v2 import MBConvV2, FusedMBConvV2, SEv2, FeatureAlign
 
+from .EfficientNetV4 import MBConvV4, FusedMBConvV4, CASE, MKDWConv, LayerScale, FeatureAlignV4
+
+from .MobileNetV4 import MNV4Conv, MNV4UIB, MNV4Hybrid, MobileMQA, FeatureAlignMNV4
+
+from .TransformerHybrid import SwinStage, ViTStage, MobileFormerStage, FeatureAlignTF
+
 from .block import (
     C1,
     C2,
@@ -259,4 +265,19 @@ __all__ = (
     "C3k2_Nexus",
     "NexusCSP",
     "PolarizedRefine",
+    "MBConvV4",
+    "FusedMBConvV4",
+    "CASE",
+    "MKDWConv",
+    "LayerScale",
+    "FeatureAlignV4",
+    "MNV4Conv",
+    "MNV4UIB",
+    "MNV4Hybrid",
+    "MobileMQA",
+    "FeatureAlignMNV4",
+    "SwinStage",
+    "ViTStage",
+    "MobileFormerStage",
+    "FeatureAlignTF",
 )
