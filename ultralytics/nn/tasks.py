@@ -105,6 +105,12 @@ from ultralytics.nn.modules import (
     MNV4Hybrid,
     MobileMQA,
     FeatureAlignMNV4,
+    MNV4ProConv,
+    MNV4ProUIB,
+    MNV4ProHybrid,
+    MNV4ProNeck,
+    EfficientGQA,
+    FeatureAlignMNV4Pro,
     SwinStage,
     ViTStage,
     MobileFormerStage,
@@ -132,6 +138,12 @@ from ultralytics.nn.modules import (
     C3k2_Nexus,
     NexusCSP,
     PolarizedRefine,
+    DualFreqConv,
+    MomentContrastGate,
+    PrismBottleneck,
+    C3k2_Prism,
+    PrismCSP,
+    FreqSpatialRefine,
 )
 
 
@@ -1127,6 +1139,11 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             MNV4UIB,
             MNV4Hybrid,
             FeatureAlignMNV4,
+            MNV4ProConv,
+            MNV4ProUIB,
+            MNV4ProHybrid,
+            MNV4ProNeck,
+            FeatureAlignMNV4Pro,
             SwinStage,
             ViTStage,
             MobileFormerStage,
@@ -1140,6 +1157,8 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             ChimeraCSP,
             C3k2_Nexus,
             NexusCSP,
+            C3k2_Prism,
+            PrismCSP,
 
         }:
             c1, c2 = ch[f], args[0]
@@ -1185,6 +1204,10 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
                 MNV4Conv,
                 MNV4UIB,
                 MNV4Hybrid,
+                MNV4ProConv,
+                MNV4ProUIB,
+                MNV4ProHybrid,
+                MNV4ProNeck,
                 SwinStage,
                 ViTStage,
                 MobileFormerStage,
@@ -1196,10 +1219,12 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
                 ChimeraCSP,
                 C3k2_Nexus,
                 NexusCSP,
+                C3k2_Prism,
+                PrismCSP,
             }:
                 args.insert(2, n)  # number of repeats
                 n = 1
-            if m in {C3k2, C3k2_CBAM, C3k2_DCNF, C3k2_DCNF_V2, C3k2_DCNF_V3, C3k2_DCNF_V1Plus, C3k2_DCNF_V4, C3k2_DCNF_V5, C3k2_DCNF_V6, C3k2_Faster, VoVGSCSP, C3k2_Phoenix, PhoenixCSP, C3k2_Chimera, ChimeraCSP, C3k2_Nexus, NexusCSP}:  # Áp dụng cho C3k2 gốc, CBAM, DCNF và DCNF_V2, V5, EDGE, Phoenix, Chimera, Nexus
+            if m in {C3k2, C3k2_CBAM, C3k2_DCNF, C3k2_DCNF_V2, C3k2_DCNF_V3, C3k2_DCNF_V1Plus, C3k2_DCNF_V4, C3k2_DCNF_V5, C3k2_DCNF_V6, C3k2_Faster, VoVGSCSP, C3k2_Phoenix, PhoenixCSP, C3k2_Chimera, ChimeraCSP, C3k2_Nexus, NexusCSP, C3k2_Prism, PrismCSP}:  # Áp dụng cho C3k2 gốc, CBAM, DCNF và DCNF_V2, V5, EDGE, Phoenix, Chimera, Nexus, Prism
                 legacy = False
                 if scale in "mlx":
                     args[3] = True  # Bật tham số c3k=True cho các bản M/L/X

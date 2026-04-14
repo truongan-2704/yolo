@@ -1,0 +1,62 @@
+# Ultralytics YOLO 🚀, AGPL-3.0 license
+# YOLO11 + MobileNetV4Pro Enhanced Backbone
+# ==========================================
+# MobileNetV4Pro key innovations over MobileNetV4:
+# 1. RepFusedIB: Multi-branch train (3×3+1×1+identity) → single 3×3 inference
+# 2. RepUIB: Multi-kernel DW training → fused single DW inference
+# 3. DualPoolSE: avg+max pooling for richer channel attention
+# 4. Better LayerScale init (1e-5) for deeper network stability
+# 5. MNV4ProNeck: UIB-based neck for consistent feature refinement
+#
+# Result: Better accuracy from richer training features + same/faster inference
+
+nc: 80
+scales:
+  n: [0.50, 0.25, 1024]
+  s: [0.50, 0.50, 1024]
+  m: [0.50, 1.00, 512]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.50, 512]
+
+backbone:
+  # [from, repeats, module, args]
+  # Stage 0: Stem — standard Conv
+  - [-1, 1, Conv, [64, 3, 2]]                # 0-P1/2
+  # Stage 1: RepFused IB (expand=2) — reparameterizable early features
+  - [-1, 1, MNV4ProConv, [64, 1, 2]]         # 1-P1/2
+  # Stage 2: RepFused IB (expand=2, stride=2) — P2
+  - [-1, 2, MNV4ProConv, [128, 2, 2]]        # 2-P2/4
+  # Stage 3: RepFused IB (expand=2, stride=2) — P3
+  - [-1, 2, MNV4ProConv, [256, 2, 2]]        # 3-P3/8
+  # Stage 4: RepUIB Extra-DW (expand=4, stride=2) — P4 with DualPoolSE
+  - [-1, 2, MNV4ProUIB, [512, 2, 4, 0.25]]   # 4-P4/16 [c2, stride, expand, se_ratio]
+  # Stage 5: RepUIB Extra-DW (expand=4, stride=1) — deeper P4 features
+  - [-1, 2, MNV4ProUIB, [512, 1, 4, 0.25]]   # 5-P4/16
+  # Stage 6: RepUIB Extra-DW (expand=4, stride=2) — P5
+  - [-1, 2, MNV4ProUIB, [1024, 2, 4, 0.25]]  # 6-P5/32
+  # SPPF for global context aggregation
+  - [-1, 1, SPPF, [1024, 5]]                 # 7-P5/32
+  # C2PSA for spatial attention at P5
+  - [-1, 2, C2PSA, [1024]]                   # 8-P5/32
+
+head:
+  # -------- Top-down pathway (FPN) --------
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 9 (P4/16)
+  - [[-1, 5], 1, Concat, [1]]                    # 10 cat backbone P4
+  - [-1, 2, MNV4ProNeck, [512, 1, 2]]            # 11 (P4-medium) UIB neck
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 12 (P3/8)
+  - [[-1, 3], 1, Concat, [1]]                    # 13 cat backbone P3
+  - [-1, 2, MNV4ProNeck, [256, 1, 2]]            # 14 (P3-small) UIB neck
+
+  # -------- Bottom-up pathway (PAN) --------
+  - [-1, 1, Conv, [256, 3, 2]]                   # 15 (P4/16)
+  - [[-1, 11], 1, Concat, [1]]                   # 16 cat head P4
+  - [-1, 2, MNV4ProNeck, [512, 1, 2]]            # 17 (P4-medium) UIB neck
+
+  - [-1, 1, Conv, [512, 3, 2]]                   # 18 (P5/32)
+  - [[-1, 8], 1, Concat, [1]]                    # 19 cat backbone P5
+  - [-1, 2, MNV4ProNeck, [1024, 1, 2]]           # 20 (P5-large) UIB neck
+
+  # Detect heads at P3, P4, P5
+  - [[14, 17, 20], 1, Detect, [nc]]              # 21 Detect(P3, P4, P5)

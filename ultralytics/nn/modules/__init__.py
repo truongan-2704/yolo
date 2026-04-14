@@ -67,6 +67,8 @@ from .chimera_blocks import TridentConv, SpectralGate, ChimeraBottleneck, C3k2_C
 
 from .nexus_blocks import OmniDirConv, NormRatioGate, NexusBottleneck, C3k2_Nexus, NexusCSP, PolarizedRefine
 
+from .prism_blocks import DualFreqConv, MomentContrastGate, PrismBottleneck, C3k2_Prism, PrismCSP, FreqSpatialRefine
+
 from .SHSA import SHSA
 
 from .EfficientNetV2 import MBConv,FusedMBConv, SE
@@ -76,6 +78,8 @@ from .EfficientNetV2_v2 import MBConvV2, FusedMBConvV2, SEv2, FeatureAlign
 from .EfficientNetV4 import MBConvV4, FusedMBConvV4, CASE, MKDWConv, LayerScale, FeatureAlignV4
 
 from .MobileNetV4 import MNV4Conv, MNV4UIB, MNV4Hybrid, MobileMQA, FeatureAlignMNV4
+
+from .MobileNetV4Pro import MNV4ProConv, MNV4ProUIB, MNV4ProHybrid, MNV4ProNeck, EfficientGQA, FeatureAlignMNV4Pro
 
 from .TransformerHybrid import SwinStage, ViTStage, MobileFormerStage, FeatureAlignTF
 
@@ -280,4 +284,16 @@ __all__ = (
     "ViTStage",
     "MobileFormerStage",
     "FeatureAlignTF",
+    "DualFreqConv",
+    "MomentContrastGate",
+    "PrismBottleneck",
+    "C3k2_Prism",
+    "PrismCSP",
+    "FreqSpatialRefine",
+    "MNV4ProConv",
+    "MNV4ProUIB",
+    "MNV4ProHybrid",
+    "MNV4ProNeck",
+    "EfficientGQA",
+    "FeatureAlignMNV4Pro",
 )

@@ -23,6 +23,8 @@ if __name__ == '__main__':
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-Nexus/yolo11-EfficientNetV2-Nexus.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-MobileNetV4/yolo11-MobileNetV4.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-MobileNetV4/yolo11-MobileNetV4-Hybrid.yaml')
+    # model = YOLO(r'ultralytics/cfg/models/11/yolo11-Prism/yolo11-Prism.yaml')
+    model = YOLO(r'ultralytics/cfg/models/11/yolo11-MobileNetV4Pro/yolo11-MobileNetV4Pro.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-TransformerHybrid/yolo11-MobileFormer.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-TransformerHybrid/yolo11-Swin.yaml')
     # model = YOLO(r'ultralytics/cfg/models/11/yolo11-TransformerHybrid/yolo11-ViT.yaml')

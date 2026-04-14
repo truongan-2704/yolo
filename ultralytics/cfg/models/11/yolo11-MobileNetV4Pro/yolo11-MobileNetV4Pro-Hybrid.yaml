@@ -1,0 +1,62 @@
+# Ultralytics YOLO 🚀, AGPL-3.0 license
+# YOLO11 + MobileNetV4Pro Hybrid (RepUIB + EfficientGQA)
+# ======================================================
+# This hybrid variant uses EfficientGQA (Grouped Query Attention) at P5
+# for global context reasoning.
+#
+# Advantages over MobileNetV4-Hybrid:
+# 1. GQA (2 KV groups) instead of MQA (1 KV group) — better accuracy
+# 2. DWConv Position Encoding — learned spatial bias in attention
+# 3. Gated FFN after attention — richer feature transformation
+# 4. RepUIB blocks fuse to single DW at inference — zero extra cost
+# 5. C2PSA removed: EfficientGQA already provides global attention + FFN
+
+nc: 80
+scales:
+  n: [0.50, 0.25, 1024]
+  s: [0.50, 0.50, 1024]
+  m: [0.50, 1.00, 512]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.50, 512]
+
+backbone:
+  # [from, repeats, module, args]
+  # Stage 0: Stem
+  - [-1, 1, Conv, [64, 3, 2]]                  # 0-P1/2
+  # Stage 1: RepFused IB (expand=2)
+  - [-1, 1, MNV4ProConv, [64, 1, 2]]           # 1-P1/2
+  # Stage 2: RepFused IB (expand=2, stride=2) — P2
+  - [-1, 2, MNV4ProConv, [128, 2, 2]]          # 2-P2/4
+  # Stage 3: RepFused IB (expand=2, stride=2) — P3
+  - [-1, 2, MNV4ProConv, [256, 2, 2]]          # 3-P3/8
+  # Stage 4: RepUIB (expand=4, stride=2) — P4 with DualPoolSE
+  - [-1, 2, MNV4ProUIB, [512, 2, 4, 0.25]]     # 4-P4/16
+  # Stage 5: RepUIB (expand=4, stride=1) — deeper P4
+  - [-1, 2, MNV4ProUIB, [512, 1, 4, 0.25]]     # 5-P4/16
+  # Stage 6: RepUIB + EfficientGQA Hybrid (expand=4, stride=2) — P5 with global attention
+  - [-1, 2, MNV4ProHybrid, [1024, 2, 4]]       # 6-P5/32
+  # SPPF for global context aggregation
+  - [-1, 1, SPPF, [1024, 5]]                   # 7-P5/32
+  # No C2PSA — EfficientGQA in MNV4ProHybrid already provides global attention + Gated FFN
+
+head:
+  # -------- Top-down pathway (FPN) --------
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 8 (P4/16)
+  - [[-1, 5], 1, Concat, [1]]                    # 9 cat backbone P4
+  - [-1, 2, MNV4ProNeck, [512, 1, 2]]            # 10 (P4-medium) UIB neck
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 11 (P3/8)
+  - [[-1, 3], 1, Concat, [1]]                    # 12 cat backbone P3
+  - [-1, 2, MNV4ProNeck, [256, 1, 2]]            # 13 (P3-small) UIB neck
+
+  # -------- Bottom-up pathway (PAN) --------
+  - [-1, 1, Conv, [256, 3, 2]]                   # 14 (P4/16)
+  - [[-1, 10], 1, Concat, [1]]                   # 15 cat head P4
+  - [-1, 2, MNV4ProNeck, [512, 1, 2]]            # 16 (P4-medium) UIB neck
+
+  - [-1, 1, Conv, [512, 3, 2]]                   # 17 (P5/32)
+  - [[-1, 7], 1, Concat, [1]]                    # 18 cat backbone P5 (SPPF)
+  - [-1, 2, MNV4ProNeck, [1024, 1, 2]]           # 19 (P5-large) UIB neck
+
+  # Detect heads at P3, P4, P5
+  - [[13, 16, 19], 1, Detect, [nc]]              # 20 Detect(P3, P4, P5)
