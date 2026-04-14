@@ -635,3 +635,347 @@ class NexusCSP(nn.Module):
         y.extend(m(y[-1]) for m in self.m)
         out = self.cv2(torch.cat(y, 1))
         return self.pcr(out)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# FAST VARIANTS — Speed-Optimized Nexus Modules
+# ═════════════════════════════════════════════════════════════════════════════
+#
+# Target: Reduce inference time by ~40-50% while preserving the core
+# innovations (directional decomposition, sparsity-aware gating, contrast).
+#
+# Key optimizations:
+#   1. Remove channel shuffle in OmniDirConv → saves .contiguous() memory copy
+#   2. Remove 2× channel expansion in bottleneck → 4c² → c² FLOPs per block
+#   3. Eliminate x.abs() in NormRatioGate → no full tensor allocation
+#   4. Single-path PolarizedRefine → removes dual DWConv + ReLU(-x) overhead
+#   5. Single 1×1 mix conv instead of expand+project pair → 2 convs → 1 conv
+#
+# FLOPs comparison (per bottleneck, c channels, H×W spatial):
+#   NexusBottleneck:     expand(2c²) + OmniDir(14c) + gate + project(2c²) ≈ 4c²
+#   FastNexusBottleneck: OmniDir(7c) + mix(c²) + gate ≈ c²
+#   → 4× lighter bottleneck computation
+#
+# Memory comparison (per bottleneck):
+#   NexusBottleneck:     2c channels through DWConv + x.abs() + shuffle
+#   FastNexusBottleneck: c channels through DWConv, no abs/shuffle
+#   → ~3× fewer intermediate tensor allocations
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FAST OMNIDIR CONV — No Channel Shuffle
+# ─────────────────────────────────────────────────────────────────────────────
+class FastOmniDirConv(nn.Module):
+    """
+    Fast Omnidirectional Depthwise Decomposition — no channel shuffle.
+
+    Same 4-way directional DWConv as OmniDirConv but removes the expensive
+    channel shuffle operation. Channel mixing is delegated to the subsequent
+    1×1 conv in the bottleneck, which already provides full inter-channel
+    information flow.
+
+    Removed: _channel_shuffle() → saves .contiguous() memory copy per forward.
+    This is the single biggest per-op speed win (eliminates reshape+permute+copy).
+
+    FLOPs per pixel: same as OmniDirConv = (18 + 2K) × c/4
+    Memory: saves one full c×H×W tensor copy per forward pass.
+
+    Args:
+        c (int): Number of input/output channels (≥4).
+        k_strip (int): Strip kernel length for H/V paths. Default 5.
+        dilation (int): Dilation rate for path D. Default 2.
+    """
+
+    def __init__(self, c, k_strip=5, dilation=2):
+        super().__init__()
+        self.c_iso = c // 4
+        self.c_hor = c // 4
+        self.c_ver = c // 4
+        self.c_dil = c - self.c_iso - self.c_hor - self.c_ver
+
+        # Path I: Isotropic 3×3 DWConv
+        self.dw_iso = nn.Conv2d(
+            self.c_iso, self.c_iso, 3, 1, 1,
+            groups=self.c_iso, bias=False,
+        )
+        # Path H: Horizontal strip 1×K DWConv
+        self.dw_hor = nn.Conv2d(
+            self.c_hor, self.c_hor, (1, k_strip), 1, (0, k_strip // 2),
+            groups=self.c_hor, bias=False,
+        )
+        # Path V: Vertical strip K×1 DWConv
+        self.dw_ver = nn.Conv2d(
+            self.c_ver, self.c_ver, (k_strip, 1), 1, (k_strip // 2, 0),
+            groups=self.c_ver, bias=False,
+        )
+        # Path D: Dilated 3×3 DWConv
+        self.dw_dil = nn.Conv2d(
+            self.c_dil, self.c_dil, 3, 1, dilation,
+            dilation=dilation, groups=self.c_dil, bias=False,
+        )
+
+        self.bn = nn.BatchNorm2d(c)
+        self.act = nn.SiLU(inplace=True)
+
+    def forward(self, x):
+        """Split → 4-way directional DWConv → concat → BN → SiLU (no shuffle)."""
+        x_iso, x_hor, x_ver, x_dil = torch.split(
+            x, [self.c_iso, self.c_hor, self.c_ver, self.c_dil], dim=1
+        )
+        out = torch.cat([
+            self.dw_iso(x_iso),
+            self.dw_hor(x_hor),
+            self.dw_ver(x_ver),
+            self.dw_dil(x_dil),
+        ], dim=1)
+        return self.act(self.bn(out))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FAST NORM-RATIO GATE — No x.abs(), Efficient Pooling
+# ─────────────────────────────────────────────────────────────────────────────
+class FastNormRatioGate(nn.Module):
+    """
+    Fast Norm-Ratio Gate — lightweight channel attention without x.abs().
+
+    Optimization over NormRatioGate:
+    - Removes x.abs() → saves full (B,C,H,W) tensor allocation
+    - Uses direct mean pooling (GAP) + max pooling (GMP) on raw features
+    - Combines: descriptor = GAP(x) + β × GMP(x)
+    - Still captures magnitude (GAP) + peak response (GMP) interaction
+
+    The β-weighted combination preserves the insight that BOTH overall
+    magnitude and peak response matter for channel importance. While this
+    doesn't compute the exact L1/L∞ sparsity ratio, the FC layers can
+    learn an equivalent calibration from the GAP+GMP descriptor.
+
+    Information preserved:
+    - GAP: mean activation level (similar to L1 norm for zero-mean features)
+    - GMP: peak activation level (similar to L∞ norm)
+    - β × GMP: learnable emphasis on peak vs mean → sparsity proxy
+
+    Params: same as NormRatioGate
+    FLOPs: saves one abs() + one division per forward pass
+    Memory: saves one full-size tensor allocation (x.abs())
+
+    Args:
+        c (int): Number of channels.
+        reduction (int): FC reduction ratio. Default 8.
+    """
+
+    def __init__(self, c, reduction=8):
+        super().__init__()
+        c_mid = max(c // reduction, 4)
+        self.beta = nn.Parameter(torch.tensor(0.5, dtype=torch.float32))
+        self.fc1 = nn.Conv2d(c, c_mid, 1, bias=True)
+        self.act = nn.SiLU(inplace=True)
+        self.fc2 = nn.Conv2d(c_mid, c, 1, bias=True)
+        self.gate = nn.Sigmoid()
+
+    def forward(self, x):
+        """GAP(x) + β × GMP(x) → FC → Sigmoid → gate."""
+        gap = x.mean(dim=(2, 3), keepdim=True)           # (B, C, 1, 1)
+        gmp = x.amax(dim=(2, 3), keepdim=True)           # (B, C, 1, 1)
+        descriptor = gap + self.beta * gmp                 # weighted combination
+        return x * self.gate(self.fc2(self.act(self.fc1(descriptor))))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FAST NEXUS BOTTLENECK — No Channel Expansion
+# ─────────────────────────────────────────────────────────────────────────────
+class FastNexusBottleneck(nn.Module):
+    """
+    Fast Nexus Bottleneck: OmniDir → 1×1 Mix → Gate → Residual.
+
+    Key optimization: removes the 2× channel expansion (EXPAND=2 → no expansion).
+
+    Original pipeline:  1×1(c→2c) → OmniDir(2c) → Gate(2c) → 1×1(2c→c) → +x
+    Fast pipeline:      OmniDir(c)  → 1×1(c→c) → Gate(c) → +x
+
+    This eliminates:
+    - One 1×1 conv (expand: c → 2c) → saves 2c² FLOPs/pixel
+    - One 1×1 conv (project: 2c → c) → saves 2c² FLOPs/pixel
+    - Halves DWConv channels (c vs 2c) → saves 7c FLOPs/pixel
+    - Halves gate channels (c vs 2c) → saves ~c FLOPs/pixel
+
+    Total savings: ~3c² FLOPs/pixel per bottleneck (4c² → c²)
+
+    The single 1×1 mix conv provides necessary inter-channel information
+    flow. Additional cross-channel mixing occurs in the C2f container's
+    cv1 (entry) and cv2 (exit) convolutions.
+
+    Args:
+        c1 (int): Input channels.
+        c2 (int): Output channels.
+        shortcut (bool): Use residual connection. Default True.
+        g (int): Groups (API compatibility). Default 1.
+        k (int): Base strip kernel length. Default 3.
+        e (float): Unused (API compatibility). Default 0.5.
+    """
+
+    def __init__(self, c1, c2, shortcut=True, g=1, k=3, e=0.5):
+        super().__init__()
+        k_strip = k + 2           # k=3→strip=5, k=5→strip=7
+        dilation = (k - 1) // 2 + 1  # k=3→d=2, k=5→d=3
+
+        # Directional DWConv (on c1 channels, NO expansion)
+        self.omnidir = FastOmniDirConv(c1, k_strip=k_strip, dilation=dilation)
+
+        # Single 1×1 conv for inter-channel mixing (replaces expand+project pair)
+        self.mix = nn.Sequential(
+            nn.Conv2d(c1, c2, 1, bias=False),
+            nn.BatchNorm2d(c2),
+        )
+
+        # Lightweight channel gate
+        self.gate = FastNormRatioGate(c2, reduction=8)
+
+        self.add = shortcut and c1 == c2
+
+    def forward(self, x):
+        """OmniDir → 1×1 Mix → Gate → Residual."""
+        y = self.omnidir(x)    # 4-way directional DWConv (no shuffle)
+        y = self.mix(y)        # 1×1 channel mixing
+        y = self.gate(y)       # channel recalibration
+        return x + y if self.add else y
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# C3K2_NEXUS_FAST — C2f Container with FastNexusBottleneck (Backbone)
+# ─────────────────────────────────────────────────────────────────────────────
+class C3k2_NexusFast(nn.Module):
+    """
+    C2f split-concat with FastNexusBottleneck — optimized backbone block.
+
+    Drop-in replacement for C3k2_Nexus with ~4× lighter bottlenecks.
+    Maintains omnidirectional spatial features and sparsity-aware gating
+    while removing channel expansion overhead.
+
+    Args:
+        c1 (int): Input channels.
+        c2 (int): Output channels.
+        n (int): Number of FastNexusBottleneck repeats. Default 1.
+        c3k (bool): Use larger kernels. Default False.
+        e (float): Channel split ratio. Default 0.5.
+        g (int): Groups (API compatibility). Default 1.
+        shortcut (bool): Residual connections. Default True.
+    """
+
+    def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
+        super().__init__()
+        self.c = int(c2 * e)
+        k = 5 if c3k else 3
+
+        self.cv1 = Conv(c1, 2 * self.c, 1, 1)
+        self.cv2 = Conv((2 + n) * self.c, c2, 1)
+        self.m = nn.ModuleList(
+            FastNexusBottleneck(self.c, self.c, shortcut, g, k=k)
+            for _ in range(n)
+        )
+
+    def forward(self, x):
+        """Split → n × FastNexusBottleneck → concat all → merge."""
+        y = list(self.cv1(x).chunk(2, 1))
+        y.extend(m(y[-1]) for m in self.m)
+        return self.cv2(torch.cat(y, 1))
+
+    def forward_split(self, x):
+        """Forward using split() instead of chunk()."""
+        y = list(self.cv1(x).split((self.c, self.c), 1))
+        y.extend(m(y[-1]) for m in self.m)
+        return self.cv2(torch.cat(y, 1))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FAST POLARIZED REFINE — Single-Path Spatial Attention
+# ─────────────────────────────────────────────────────────────────────────────
+class FastPolarizedRefine(nn.Module):
+    """
+    Fast Polarized Refinement — single-path spatial attention.
+
+    Optimization over PolarizedRefine:
+    - Removes dual ON/OFF pathway decomposition (2 DWConv → 1 DWConv)
+    - Removes F.relu(x) and F.relu(-x) intermediate tensor allocations
+    - Uses a single DWConv to learn spatial importance directly
+
+    The DWConv with bias can learn polarity-sensitive weights:
+    - Positive bias regions → amplify features (ON-center analog)
+    - Negative bias regions → suppress features (OFF-center analog)
+    - The BN provides the zero-centering needed for implicit polarity
+
+    The network can learn equivalent polarity-aware spatial refinement
+    through the DWConv weights and BN parameters, without needing the
+    explicit positive/negative decomposition.
+
+    Overhead reduction:
+    - Saves 1 DWConv + 1 BN + 2 ReLU + 1 negate + 1 subtract
+    - Keeps: 1 DWConv + 1 BN + 1 sigmoid + 1 multiply + 1 add
+
+    Args:
+        c (int): Number of channels.
+    """
+
+    def __init__(self, c):
+        super().__init__()
+        self.dw = nn.Conv2d(c, c, 3, 1, 1, groups=c, bias=True)
+        self.bn = nn.BatchNorm2d(c)
+        self.gate = nn.Sigmoid()
+
+    def forward(self, x):
+        """DWConv → BN → Sigmoid → contrast × x + x (residual)."""
+        contrast = self.gate(self.bn(self.dw(x)))
+        return x * contrast + x
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NEXUS CSP FAST — C2f + FastNexusBottleneck + FastPolarizedRefine (Neck)
+# ─────────────────────────────────────────────────────────────────────────────
+class NexusCSPFast(nn.Module):
+    """
+    Fast NexusCSP — C2f + FastNexusBottleneck + FastPolarizedRefine for neck.
+
+    Combines all speed optimizations:
+    - FastNexusBottleneck: no expansion, no shuffle, efficient gate
+    - FastPolarizedRefine: single-path spatial attention
+
+    Total speed improvement per block vs NexusCSP:
+    - Bottleneck: ~4× lighter (c² vs 4c² FLOPs)
+    - PolarizedRefine: ~2× lighter (1 DWConv vs 2 DWConv + ReLU ops)
+    - Memory: ~3× fewer intermediate tensor allocations
+
+    Args:
+        c1 (int): Input channels.
+        c2 (int): Output channels.
+        n (int): Number of FastNexusBottleneck repeats. Default 1.
+        c3k (bool): Use larger base kernel. Default False.
+        e (float): Channel split ratio. Default 0.5.
+        g (int): Groups (API compatibility). Default 1.
+        shortcut (bool): Residual in bottleneck. Default True.
+    """
+
+    def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
+        super().__init__()
+        self.c = int(c2 * e)
+        k = 5 if c3k else 3
+
+        self.cv1 = Conv(c1, 2 * self.c, 1, 1)
+        self.cv2 = Conv((2 + n) * self.c, c2, 1)
+        self.m = nn.ModuleList(
+            FastNexusBottleneck(self.c, self.c, shortcut, g, k=k)
+            for _ in range(n)
+        )
+        self.pcr = FastPolarizedRefine(c2)
+
+    def forward(self, x):
+        """Split → n × FastNexusBottleneck → concat → merge → fast refine."""
+        y = list(self.cv1(x).chunk(2, 1))
+        y.extend(m(y[-1]) for m in self.m)
+        out = self.cv2(torch.cat(y, 1))
+        return self.pcr(out)
+
+    def forward_split(self, x):
+        """Forward using split() instead of chunk()."""
+        y = list(self.cv1(x).split((self.c, self.c), 1))
+        y.extend(m(y[-1]) for m in self.m)
+        out = self.cv2(torch.cat(y, 1))
+        return self.pcr(out)
