@@ -1,0 +1,70 @@
+# Ultralytics YOLO 🚀, AGPL-3.0 license
+# ═══════════════════════════════════════════════════════════════════════════
+# YOLO-Prism V2 — Tri-Band Frequency-Decomposed Detection Architecture
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Core innovations over Prism V1:
+#   1. TriFreqConv:       3-band (LF+MF+HF) vs 2-band, 16% fewer FLOPs
+#   2. FreqContrastGate:  Tri-moment (L1+γ+σ²) vs dual-moment attention
+#   3. AdaptiveFreqRefine: 3 spatial maps + learnable frequency balance
+#
+# Expected improvements:
+#   - ~14% fewer parameters than Prism V1
+#   - Better texture recognition (dedicated MF band)
+#   - Adaptive frequency emphasis per pyramid level
+
+nc: 80
+
+scales:
+  # [depth_mul, width_mul, max_channels]
+  n: [0.50, 0.25, 1024]    # PrismV2-n: ~0.95M params, edge deployment
+  s: [0.50, 0.50, 1024]    # PrismV2-s: ~2.6M params, balanced
+  m: [0.50, 1.00, 512]     # PrismV2-m: ~6.8M params, standard
+  l: [1.00, 1.00, 512]     # PrismV2-l: ~12M params, accurate
+  x: [1.00, 1.50, 512]     # PrismV2-x: ~20M params, maximum accuracy
+
+backbone:
+  # [from, repeats, module, args]
+
+  # ── Stage 0: Stem ──
+  - [-1, 1, Conv, [64, 3, 2]]                     # 0-P1/2   Standard stem
+
+  # ── Stage 1: P1 → P2 ──
+  - [-1, 1, Conv, [128, 3, 2]]                    # 1-P2/4   Downsample
+  - [-1, 2, C3k2_PrismV2, [128, False]]           # 2-P2/4   TriFreq (lo=5,hi=3) + FCG
+
+  # ── Stage 2: P2 → P3 (small objects) ──
+  - [-1, 1, Conv, [256, 3, 2]]                    # 3-P3/8   Downsample
+  - [-1, 2, C3k2_PrismV2, [256, False]]           # 4-P3/8   TriFreq + FCG
+
+  # ── Stage 3: P3 → P4 (medium objects) ──
+  - [-1, 1, Conv, [512, 3, 2]]                    # 5-P4/16  Downsample
+  - [-1, 2, C3k2_PrismV2, [512, False]]           # 6-P4/16  TriFreq + FCG
+
+  # ── Stage 4: P4 → P5 (large objects) ──
+  - [-1, 1, Conv, [1024, 3, 2]]                   # 7-P5/32  Downsample
+  - [-1, 2, C3k2_PrismV2, [1024, True]]           # 8-P5/32  c3k=True (lo=7,hi=5)
+
+  - [-1, 1, SPPF, [1024, 5]]                      # 9-P5/32  Spatial Pyramid Pooling
+
+head:
+  # ════════════════════ FPN: Top-Down Pathway ════════════════════
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]        # 10 Upsample P5→P4 size
+  - [[-1, 6], 1, Concat, [1]]                          # 11 Concat with backbone P4
+  - [-1, 2, PrismV2CSP, [512, False]]                  # 12 V2 fusion (TriFreq+FCG+AFR)
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]        # 13 Upsample P4→P3 size
+  - [[-1, 4], 1, Concat, [1]]                          # 14 Concat with backbone P3
+  - [-1, 2, PrismV2CSP, [256, False]]                  # 15 V2 fusion (P3)
+
+  # ════════════════════ PAN: Bottom-Up Pathway ════════════════════
+  - [-1, 1, Conv, [256, 3, 2]]                         # 16 Downsample P3→P4
+  - [[-1, 12], 1, Concat, [1]]                         # 17 Concat with FPN P4
+  - [-1, 2, PrismV2CSP, [512, False]]                  # 18 V2 fusion (P4)
+
+  - [-1, 1, Conv, [512, 3, 2]]                         # 19 Downsample P4→P5
+  - [[-1, 9], 1, Concat, [1]]                          # 20 Concat with backbone P5
+  - [-1, 2, PrismV2CSP, [1024, True]]                  # 21 V2 fusion (P5), c3k=True
+
+  # ════════════════════ Detection Head ════════════════════
+  - [[15, 18, 21], 1, Detect, [nc]]                    # 22 Detect(P3, P4, P5)

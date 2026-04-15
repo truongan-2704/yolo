@@ -150,6 +150,12 @@ from ultralytics.nn.modules import (
     C3k2_Prism,
     PrismCSP,
     FreqSpatialRefine,
+    TriFreqConv,
+    FreqContrastGate,
+    PrismV2Bottleneck,
+    C3k2_PrismV2,
+    PrismV2CSP,
+    AdaptiveFreqRefine,
     WaveletConv,
     TopologicalGate,
     ZenithBottleneck,
@@ -1173,6 +1179,8 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             NexusCSPFast,
             C3k2_Prism,
             PrismCSP,
+            C3k2_PrismV2,
+            PrismV2CSP,
             C3k2_Zenith,
             ZenithCSP,
 
@@ -1239,12 +1247,14 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
                 NexusCSPFast,
                 C3k2_Prism,
                 PrismCSP,
+                C3k2_PrismV2,
+                PrismV2CSP,
                 C3k2_Zenith,
                 ZenithCSP,
             }:
                 args.insert(2, n)  # number of repeats
                 n = 1
-            if m in {C3k2, C3k2_CBAM, C3k2_DCNF, C3k2_DCNF_V2, C3k2_DCNF_V3, C3k2_DCNF_V1Plus, C3k2_DCNF_V4, C3k2_DCNF_V5, C3k2_DCNF_V6, C3k2_Faster, VoVGSCSP, C3k2_Phoenix, PhoenixCSP, C3k2_Chimera, ChimeraCSP, C3k2_Nexus, NexusCSP, C3k2_NexusFast, NexusCSPFast, C3k2_Prism, PrismCSP, C3k2_Zenith, ZenithCSP}:  # Áp dụng cho C3k2 gốc, CBAM, DCNF và DCNF_V2, V5, EDGE, Phoenix, Chimera, Nexus, NexusFast, Prism, Zenith
+            if m in {C3k2, C3k2_CBAM, C3k2_DCNF, C3k2_DCNF_V2, C3k2_DCNF_V3, C3k2_DCNF_V1Plus, C3k2_DCNF_V4, C3k2_DCNF_V5, C3k2_DCNF_V6, C3k2_Faster, VoVGSCSP, C3k2_Phoenix, PhoenixCSP, C3k2_Chimera, ChimeraCSP, C3k2_Nexus, NexusCSP, C3k2_NexusFast, NexusCSPFast, C3k2_Prism, PrismCSP, C3k2_PrismV2, PrismV2CSP, C3k2_Zenith, ZenithCSP}:  # Áp dụng cho C3k2 gốc, CBAM, DCNF và DCNF_V2, V5, EDGE, Phoenix, Chimera, Nexus, NexusFast, Prism, PrismV2, Zenith
                 legacy = False
                 if scale in "mlx":
                     args[3] = True  # Bật tham số c3k=True cho các bản M/L/X

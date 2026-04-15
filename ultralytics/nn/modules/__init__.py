@@ -69,6 +69,8 @@ from .nexus_blocks import OmniDirConv, NormRatioGate, NexusBottleneck, C3k2_Nexu
 
 from .prism_blocks import DualFreqConv, MomentContrastGate, PrismBottleneck, C3k2_Prism, PrismCSP, FreqSpatialRefine
 
+from .prism_v2_blocks import TriFreqConv, FreqContrastGate, PrismV2Bottleneck, C3k2_PrismV2, PrismV2CSP, AdaptiveFreqRefine
+
 from .zenith_blocks import WaveletConv, TopologicalGate, ZenithBottleneck, C3k2_Zenith, ZenithCSP, AdaptiveScaleRouter
 
 from .SHSA import SHSA
@@ -310,4 +312,10 @@ __all__ = (
     "C3k2_Zenith",
     "ZenithCSP",
     "AdaptiveScaleRouter",
+    "TriFreqConv",
+    "FreqContrastGate",
+    "PrismV2Bottleneck",
+    "C3k2_PrismV2",
+    "PrismV2CSP",
+    "AdaptiveFreqRefine",
 )
