@@ -69,6 +69,8 @@ from .nexus_blocks import OmniDirConv, NormRatioGate, NexusBottleneck, C3k2_Nexu
 
 from .prism_blocks import DualFreqConv, MomentContrastGate, PrismBottleneck, C3k2_Prism, PrismCSP, FreqSpatialRefine
 
+from .zenith_blocks import WaveletConv, TopologicalGate, ZenithBottleneck, C3k2_Zenith, ZenithCSP, AdaptiveScaleRouter
+
 from .SHSA import SHSA
 
 from .EfficientNetV2 import MBConv,FusedMBConv, SE
@@ -302,4 +304,10 @@ __all__ = (
     "MNV4ProNeck",
     "EfficientGQA",
     "FeatureAlignMNV4Pro",
+    "WaveletConv",
+    "TopologicalGate",
+    "ZenithBottleneck",
+    "C3k2_Zenith",
+    "ZenithCSP",
+    "AdaptiveScaleRouter",
 )
