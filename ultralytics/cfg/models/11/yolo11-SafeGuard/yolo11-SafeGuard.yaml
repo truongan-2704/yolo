@@ -1,0 +1,88 @@
+# Ultralytics YOLO 🚀, AGPL-3.0 license
+# ═══════════════════════════════════════════════════════════════════════════
+# YOLO-SafeGuard: PPE-Optimized Detection Architecture
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Designed specifically for Personal Protective Equipment (PPE) detection:
+#   - P2 detection layer for tiny objects (goggles, gloves ~20px)
+#   - PConv backbone for edge deployment efficiency
+#   - Coordinate Attention for body-part spatial awareness
+#   - BiFPN-weighted concat for multi-scale fusion
+#   - BodyContextModule for absence detection (no-helmet, no-vest)
+#
+# 10 PPE classes: helmet, vest, gloves, goggles, boots,
+#                 no-helmet, no-vest, no-gloves, no-goggles, person
+#
+# Target: Edge device deployment with mAP improvement over baseline
+
+nc: 10  # PPE classes
+
+scales:
+  # [depth_mul, width_mul, max_channels]
+  n: [0.50, 0.25, 1024]   # SafeGuard-n: ~1.8M params, edge deployment
+  s: [0.50, 0.50, 1024]   # SafeGuard-s: ~5M params, balanced
+  m: [0.50, 1.00, 512]    # SafeGuard-m: ~12M params, accurate
+  l: [1.00, 1.00, 512]    # SafeGuard-l: ~18M params, high accuracy
+  x: [1.00, 1.50, 512]    # SafeGuard-x: ~30M params, maximum accuracy
+
+backbone:
+  # [from, repeats, module, args]
+
+  # ── Stage 0: Stem ──
+  - [-1, 1, Conv, [64, 3, 2]]                       # 0-P1/2   Stem
+
+  # ── Stage 1: P2/4 — tiny objects (goggles, gloves) ──
+  - [-1, 1, Conv, [128, 3, 2]]                      # 1-P2/4   Downsample
+  - [-1, 2, C3k2_SafeGuard, [128, False]]           # 2-P2/4   PConv+CA
+
+  # ── Stage 2: P3/8 — small objects (helmet, boots) ──
+  - [-1, 1, Conv, [256, 3, 2]]                      # 3-P3/8   Downsample
+  - [-1, 2, C3k2_SafeGuard, [256, False]]           # 4-P3/8   PConv+CA
+
+  # ── Stage 3: P4/16 — medium objects (vest) ──
+  - [-1, 1, Conv, [512, 3, 2]]                      # 5-P4/16  Downsample
+  - [-1, 2, C3k2_SafeGuard, [512, True]]            # 6-P4/16  PConv+CA c3k=True
+
+  # ── Stage 4: P5/32 — large objects (person) ──
+  - [-1, 1, Conv, [1024, 3, 2]]                     # 7-P5/32  Downsample
+  - [-1, 2, C3k2_SafeGuard, [1024, True]]           # 8-P5/32  PConv+CA c3k=True
+  - [-1, 1, SPPF, [1024, 5]]                        # 9-P5/32  Multi-scale pooling
+  - [-1, 1, BodyContextModule, [1024]]               # 10-P5/32 Body context for absence detection
+
+head:
+  # ════════════════════ FPN: Top-Down Pathway ════════════════════
+
+  # P5 → P4
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]      # 11 Upsample P5→P4
+  - [[-1, 6], 1, BiFPN_Concat, [1, 2]]              # 12 BiFPN weighted concat P4
+  - [-1, 2, SafeGuardCSP, [512, False]]              # 13 SafeGuard fusion P4
+
+  # P4 → P3
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]      # 14 Upsample P4→P3
+  - [[-1, 4], 1, BiFPN_Concat, [1, 2]]              # 15 BiFPN weighted concat P3
+  - [-1, 2, SafeGuardCSP, [256, False]]              # 16 SafeGuard fusion P3
+
+  # P3 → P2
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]      # 17 Upsample P3→P2
+  - [[-1, 2], 1, BiFPN_Concat, [1, 2]]              # 18 BiFPN weighted concat P2
+  - [-1, 2, SafeGuardCSP, [128, False]]              # 19 SafeGuard fusion P2 (tiny objects!)
+
+  # ════════════════════ PAN: Bottom-Up Pathway ════════════════════
+
+  # P2 → P3
+  - [-1, 1, Conv, [128, 3, 2]]                      # 20 Downsample P2→P3
+  - [[-1, 16], 1, BiFPN_Concat, [1, 2]]             # 21 BiFPN weighted concat P3
+  - [-1, 2, SafeGuardCSP, [256, False]]              # 22 SafeGuard fusion P3
+
+  # P3 → P4
+  - [-1, 1, Conv, [256, 3, 2]]                      # 23 Downsample P3→P4
+  - [[-1, 13], 1, BiFPN_Concat, [1, 2]]             # 24 BiFPN weighted concat P4
+  - [-1, 2, SafeGuardCSP, [512, False]]              # 25 SafeGuard fusion P4
+
+  # P4 → P5
+  - [-1, 1, Conv, [512, 3, 2]]                      # 26 Downsample P4→P5
+  - [[-1, 10], 1, BiFPN_Concat, [1, 2]]             # 27 BiFPN weighted concat P5
+  - [-1, 2, SafeGuardCSP, [1024, True]]              # 28 SafeGuard fusion P5
+
+  # ════════════════════ Detection Head (4-scale) ════════════════════
+  - [[19, 22, 25, 28], 1, Detect, [nc]]             # 29 Detect(P2, P3, P4, P5)

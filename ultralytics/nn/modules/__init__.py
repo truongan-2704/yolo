@@ -73,6 +73,27 @@ from .prism_v2_blocks import TriFreqConv, FreqContrastGate, PrismV2Bottleneck, C
 
 from .zenith_blocks import WaveletConv, TopologicalGate, ZenithBottleneck, C3k2_Zenith, ZenithCSP, AdaptiveScaleRouter
 
+from .spectra_blocks import SpectraConv, WaveletEnergyGate, SpectraBottleneck, C3k2_Spectra, SpectraCSP, HaarWavelet2D
+
+from .hybrid_blocks import (
+    C3k2_NexusPrism, NexusPrismCSP,
+    C3k2_PrismEdge, PrismEdgeCSP,
+    C3k2_PhoenixNexus, PhoenixNexusCSP,
+    C3k2_ChimeraPrism, ChimeraPrismCSP,
+    C3k2_SpectraEdge, SpectraEdgeCSP,
+)
+
+from .safeguard_blocks import (
+    LightCoordAtt, SafeGuardPConv, SafeGuardBottleneck,
+    C3k2_SafeGuard, SafeGuardCSP, BodyContextModule,
+)
+
+from .yolo13_blocks import (
+    MSConv, GatedChannelFusion, DynamicSpatialFusion,
+    YOLO13Bottleneck, YOLO13BottleneckLight, C3k2_YOLO13, YOLO13CSP,
+    AdaptiveDown, EnhancedSPPF, ScaleAwareAttention, YOLO13Stem, MSConvBlock,
+)
+
 from .SHSA import SHSA
 
 from .EfficientNetV2 import MBConv,FusedMBConv, SE
@@ -318,4 +339,38 @@ __all__ = (
     "C3k2_PrismV2",
     "PrismV2CSP",
     "AdaptiveFreqRefine",
+    "SpectraConv",
+    "WaveletEnergyGate",
+    "SpectraBottleneck",
+    "C3k2_Spectra",
+    "SpectraCSP",
+    "HaarWavelet2D",
+    "C3k2_NexusPrism",
+    "NexusPrismCSP",
+    "C3k2_PrismEdge",
+    "PrismEdgeCSP",
+    "C3k2_PhoenixNexus",
+    "PhoenixNexusCSP",
+    "C3k2_ChimeraPrism",
+    "ChimeraPrismCSP",
+    "C3k2_SpectraEdge",
+    "SpectraEdgeCSP",
+    "LightCoordAtt",
+    "SafeGuardPConv",
+    "SafeGuardBottleneck",
+    "C3k2_SafeGuard",
+    "SafeGuardCSP",
+    "BodyContextModule",
+    "MSConv",
+    "GatedChannelFusion",
+    "DynamicSpatialFusion",
+    "YOLO13Bottleneck",
+    "YOLO13BottleneckLight",
+    "C3k2_YOLO13",
+    "YOLO13CSP",
+    "AdaptiveDown",
+    "EnhancedSPPF",
+    "ScaleAwareAttention",
+    "YOLO13Stem",
+    "MSConvBlock",
 )

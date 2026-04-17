@@ -162,6 +162,40 @@ from ultralytics.nn.modules import (
     C3k2_Zenith,
     ZenithCSP,
     AdaptiveScaleRouter,
+    SpectraConv,
+    WaveletEnergyGate,
+    SpectraBottleneck,
+    C3k2_Spectra,
+    SpectraCSP,
+    HaarWavelet2D,
+    C3k2_NexusPrism,
+    NexusPrismCSP,
+    C3k2_PrismEdge,
+    PrismEdgeCSP,
+    C3k2_PhoenixNexus,
+    PhoenixNexusCSP,
+    C3k2_ChimeraPrism,
+    ChimeraPrismCSP,
+    C3k2_SpectraEdge,
+    SpectraEdgeCSP,
+    LightCoordAtt,
+    SafeGuardPConv,
+    SafeGuardBottleneck,
+    C3k2_SafeGuard,
+    SafeGuardCSP,
+    BodyContextModule,
+    MSConv,
+    GatedChannelFusion,
+    DynamicSpatialFusion,
+    YOLO13Bottleneck,
+    YOLO13BottleneckLight,
+    C3k2_YOLO13,
+    YOLO13CSP,
+    AdaptiveDown,
+    EnhancedSPPF,
+    ScaleAwareAttention,
+    YOLO13Stem,
+    MSConvBlock,
 )
 
 
@@ -1183,6 +1217,25 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             PrismV2CSP,
             C3k2_Zenith,
             ZenithCSP,
+            C3k2_Spectra,
+            SpectraCSP,
+            C3k2_NexusPrism,
+            NexusPrismCSP,
+            C3k2_PrismEdge,
+            PrismEdgeCSP,
+            C3k2_PhoenixNexus,
+            PhoenixNexusCSP,
+            C3k2_ChimeraPrism,
+            ChimeraPrismCSP,
+            C3k2_SpectraEdge,
+            SpectraEdgeCSP,
+            C3k2_SafeGuard,
+            SafeGuardCSP,
+            C3k2_YOLO13,
+            YOLO13CSP,
+            AdaptiveDown,
+            EnhancedSPPF,
+            MSConvBlock,
 
         }:
             c1, c2 = ch[f], args[0]
@@ -1251,10 +1304,26 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
                 PrismV2CSP,
                 C3k2_Zenith,
                 ZenithCSP,
+                C3k2_Spectra,
+                SpectraCSP,
+                C3k2_NexusPrism,
+                NexusPrismCSP,
+                C3k2_PrismEdge,
+                PrismEdgeCSP,
+                C3k2_PhoenixNexus,
+                PhoenixNexusCSP,
+                C3k2_ChimeraPrism,
+                ChimeraPrismCSP,
+                C3k2_SpectraEdge,
+                SpectraEdgeCSP,
+                C3k2_SafeGuard,
+                SafeGuardCSP,
+                C3k2_YOLO13,
+                YOLO13CSP,
             }:
                 args.insert(2, n)  # number of repeats
                 n = 1
-            if m in {C3k2, C3k2_CBAM, C3k2_DCNF, C3k2_DCNF_V2, C3k2_DCNF_V3, C3k2_DCNF_V1Plus, C3k2_DCNF_V4, C3k2_DCNF_V5, C3k2_DCNF_V6, C3k2_Faster, VoVGSCSP, C3k2_Phoenix, PhoenixCSP, C3k2_Chimera, ChimeraCSP, C3k2_Nexus, NexusCSP, C3k2_NexusFast, NexusCSPFast, C3k2_Prism, PrismCSP, C3k2_PrismV2, PrismV2CSP, C3k2_Zenith, ZenithCSP}:  # Áp dụng cho C3k2 gốc, CBAM, DCNF và DCNF_V2, V5, EDGE, Phoenix, Chimera, Nexus, NexusFast, Prism, PrismV2, Zenith
+            if m in {C3k2, C3k2_CBAM, C3k2_DCNF, C3k2_DCNF_V2, C3k2_DCNF_V3, C3k2_DCNF_V1Plus, C3k2_DCNF_V4, C3k2_DCNF_V5, C3k2_DCNF_V6, C3k2_Faster, VoVGSCSP, C3k2_Phoenix, PhoenixCSP, C3k2_Chimera, ChimeraCSP, C3k2_Nexus, NexusCSP, C3k2_NexusFast, NexusCSPFast, C3k2_Prism, PrismCSP, C3k2_PrismV2, PrismV2CSP, C3k2_Zenith, ZenithCSP, C3k2_Spectra, SpectraCSP, C3k2_NexusPrism, NexusPrismCSP, C3k2_PrismEdge, PrismEdgeCSP, C3k2_PhoenixNexus, PhoenixNexusCSP, C3k2_ChimeraPrism, ChimeraPrismCSP, C3k2_SpectraEdge, SpectraEdgeCSP, C3k2_SafeGuard, SafeGuardCSP, C3k2_YOLO13, YOLO13CSP}:
                 legacy = False
                 if scale in "mlx":
                     args[3] = True  # Bật tham số c3k=True cho các bản M/L/X
@@ -1300,7 +1369,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             args = [c1, c2]
         elif m in {MHSA, ShuffleAttention, SHSA}:
             args = [ch[f], *args]
-        elif m in {GAM, CoordAtt}:
+        elif m in {GAM, CoordAtt, BodyContextModule}:
             c2 = ch[f]
             args = [c2,*args]
         elif m in {EMA}:
