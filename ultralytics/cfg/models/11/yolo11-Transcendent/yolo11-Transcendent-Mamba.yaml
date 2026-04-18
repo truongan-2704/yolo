@@ -1,0 +1,59 @@
+# Ultralytics YOLO 🚀 — YOLO-Transcendent-Mamba
+# =========================================================================
+# Mục tiêu: EXTREME GLOBAL CONTEXT — thay C3k2 ở P4+P5 bằng MSSO.
+# Đặc điểm:
+#   - Backbone Prism-v2 ở P2/P3 (giữ tri-freq cho texture)
+#   - MSSO xuất hiện ở cả P4 (d_state=8, heads=2) và P5 (d_state=16, heads=4)
+#     → SSM selective-scan toàn feature map, linear-time
+#   - Neck RXG_Fuse + PrismV2CSP (như base Transcendent)
+#   - Thêm DMC_Block ở đầu neck cho P3 (boundary refine cho small-obj)
+#
+# Use-case: scene-level detection, aerial, surveillance (cần global reasoning).
+# Trade-off: selective-scan loop Python chậm hơn ở eager; kỳ vọng hưởng lợi lớn
+#            khi torch.compile hoặc export với fused kernel.
+
+nc: 80
+scales:
+  n: [0.50, 0.25, 1024]
+  s: [0.50, 0.50, 1024]
+  m: [0.67, 0.75, 768]
+  l: [1.00, 1.00, 512]
+
+backbone:
+  - [-1, 1, Conv,            [64, 3, 2]]           # 0  P1/2
+  - [-1, 1, Conv,            [128, 3, 2]]          # 1  P2/4
+  - [-1, 1, C3k2_PrismV2,    [128, False]]         # 2  P2/4 tri-freq
+  - [-1, 1, Conv,            [256, 3, 2]]          # 3  P3/8
+  - [-1, 2, C3k2_PrismV2,    [256, False]]         # 4  P3/8 tri-freq  ← skip
+  - [-1, 1, Conv,            [512, 3, 2]]          # 5  P4/16
+  - [-1, 1, MSSO,            [512, 8, 1.0, 2]]     # 6  P4 SSM (linear-time!)
+  - [-1, 1, C3k2_PrismV2,    [512, False]]         # 7  P4 tri-freq residual
+  - [-1, 1, Conv,            [1024, 3, 2]]         # 8  P5/32
+  - [-1, 1, MSSO,            [1024, 16, 2.0, 4]]   # 9  P5 SSM heavy
+  - [-1, 1, C3k2_PrismV2,    [1024, True]]         # 10 P5 tri-freq residual ← skip
+
+head:
+  # Refine + boundary
+  - [4, 1, DMC_Block, [256, 1]]                    # 11 P3 morphology (small-obj edges)
+  - [7, 1, AdaptiveFreqRefine, []]                 # 12 P4 refine
+  - [10, 1, AdaptiveFreqRefine, []]                # 13 P5 refine
+
+  # FPN top-down RXG
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]     # 14 up P5
+  - [[-1, 12], 1, RXG_Fuse, [512]]                 # 15
+  - [-1, 2, PrismV2CSP, [512, False]]              # 16
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]     # 17 up P4
+  - [[-1, 11], 1, RXG_Fuse, [256]]                 # 18
+  - [-1, 2, PrismV2CSP, [256, False]]              # 19 ← P3 out
+
+  # PAN bottom-up với tri-input
+  - [-1, 1, Conv, [256, 3, 2]]                     # 20 down P3
+  - [[-1, 16, 12], 1, RXG_Fuse, [512]]             # 21
+  - [-1, 2, C3k2, [512, False]]                    # 22 ← P4 out
+
+  - [-1, 1, Conv, [512, 3, 2]]                     # 23 down P4
+  - [[-1, 13], 1, RXG_Fuse, [1024]]                # 24
+  - [-1, 2, C3k2, [1024, True]]                    # 25 ← P5 out
+
+  - [[19, 22, 25], 1, Detect, [nc]]                # 26 Detect(P3,P4,P5)

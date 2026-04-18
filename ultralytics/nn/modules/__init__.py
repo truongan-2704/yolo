@@ -19,6 +19,10 @@ Example:
 
 from .BiFPN import (BiFPN_Concat, BiFPN, BiFPN_Transformer)
 
+from .litefusion import LiteFusion
+
+from .xbn_blocks import MSSO, DMC_Block, RXG_Fuse
+
 from .EMA import EMA
 
 from .SimAM import SimAM
@@ -373,4 +377,8 @@ __all__ = (
     "ScaleAwareAttention",
     "YOLO13Stem",
     "MSConvBlock",
+    "LiteFusion",
+    "MSSO",
+    "DMC_Block",
+    "RXG_Fuse",
 )

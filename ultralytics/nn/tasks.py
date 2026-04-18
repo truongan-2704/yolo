@@ -201,6 +201,8 @@ from ultralytics.nn.modules import (
 
 
 from ultralytics.nn.modules import (BiFPN_Concat, BiFPN, BiFPN_Transformer)
+from ultralytics.nn.modules import LiteFusion
+from ultralytics.nn.modules import MSSO, DMC_Block, RXG_Fuse
 
 from ultralytics.utils import DEFAULT_CFG_DICT, DEFAULT_CFG_KEYS, LOGGER, colorstr, emojis, yaml_load
 from ultralytics.utils.checks import check_requirements, check_suffix, check_yaml
@@ -1367,9 +1369,26 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             c2 = make_divisible(args[0] * width_gain, 8)
             c1 = [ch[x] for x in f]
             args = [c1, c2]
+        elif m is LiteFusion:
+            # LiteFusion nhận (c1_list, c2) — giống BiFPN nhưng c2 scale theo width hiện hành
+            c2 = make_divisible(min(args[0], max_channels) * width, 8)
+            c1 = [ch[x] for x in f]
+            args = [c1, c2, *args[1:]]
+        elif m is RXG_Fuse:
+            # RXG_Fuse(c1_list, c2) — multi-input neck fusion kiểu BiFPN + IB-Route
+            c2 = make_divisible(min(args[0], max_channels) * width, 8)
+            c1 = [ch[x] for x in f]
+            args = [c1, c2, *args[1:]]
+        elif m in {MSSO, DMC_Block}:
+            # Single-input XBN blocks: (c1, c2, ...)
+            c1 = ch[f]
+            c2 = args[0]
+            if c2 != nc:
+                c2 = make_divisible(min(c2, max_channels) * width, 8)
+            args = [c1, c2, *args[1:]]
         elif m in {MHSA, ShuffleAttention, SHSA}:
             args = [ch[f], *args]
-        elif m in {GAM, CoordAtt, BodyContextModule}:
+        elif m in {GAM, CoordAtt, BodyContextModule, AdaptiveFreqRefine}:
             c2 = ch[f]
             args = [c2,*args]
         elif m in {EMA}:

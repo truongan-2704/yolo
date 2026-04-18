@@ -1,0 +1,77 @@
+# Ultralytics YOLO 🚀, AGPL-3.0 license
+# ═══════════════════════════════════════════════════════════════════════════
+# YOLO-Prism V5 — Speed-Optimized Tri-Band Frequency Architecture
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Mục tiêu: tối ưu tốc độ (latency GPU/CPU) so với Prism V2/V3/V4.
+#
+# Chiến lược tối ưu tốc độ:
+#   1. P2 dùng C3k2 thường (không Prism) — stage resolution cao nhất, ít cần
+#      frequency decomposition, bỏ khối Prism giảm FLOPs đáng kể.
+#   2. Giảm repeats từ 2 → 1 ở P2 để cắt chi phí tại feature map lớn.
+#   3. Prism V2 block (TriFreq + FCG) chỉ dùng ở P3, P4, P5 — nơi semantic
+#      tần số có giá trị nhất và resolution đã đủ nhỏ để block đắt hơn vẫn rẻ.
+#   4. Bỏ C2PSA (có trong V4) để tránh bottleneck attention toàn cục.
+#   5. SPPF kernel giữ 5, nhưng có thể hạ xuống 3 nếu cần tốc độ thêm.
+#   6. Head PAN (bottom-up) dùng C3k2 tiêu chuẩn thay cho PrismCSP để giảm
+#      độ trễ đường truyền phía head; chỉ FPN top-down dùng PrismV2CSP
+#      (nơi fusion tần số đem lại lợi ích phát hiện tốt nhất).
+#
+# Kỳ vọng: ~15-25% nhanh hơn V2 trên cùng thiết bị, accuracy xấp xỉ (có thể
+# giảm nhẹ ở small objects do P2 không còn Prism).
+
+nc: 80
+
+scales:
+  # [depth_mul, width_mul, max_channels]
+  n: [0.50, 0.25, 1024]    # PrismV5-n: siêu nhẹ, triển khai edge
+  s: [0.50, 0.50, 1024]    # PrismV5-s: cân bằng
+  m: [0.50, 1.00, 512]     # PrismV5-m: tiêu chuẩn
+  l: [1.00, 1.00, 512]     # PrismV5-l: chính xác
+  x: [1.00, 1.50, 512]     # PrismV5-x: độ chính xác tối đa
+
+backbone:
+  # [from, repeats, module, args]
+
+  # ── Stage 0: Stem ──
+  - [-1, 1, Conv, [64, 3, 2]]                     # 0-P1/2   Stem Conv 3×3 stride 2
+
+  # ── Stage 1: P1 → P2 (resolution cao → dùng block nhẹ) ──
+  - [-1, 1, Conv, [128, 3, 2]]                    # 1-P2/4   Downsample
+  - [-1, 1, C3k2, [128, False, 0.25]]             # 2-P2/4   C3k2 tiêu chuẩn, repeats=1 để giảm FLOPs
+
+  # ── Stage 2: P2 → P3 (small objects — bật Prism) ──
+  - [-1, 1, Conv, [256, 3, 2]]                    # 3-P3/8   Downsample
+  - [-1, 2, C3k2_PrismV2, [256, False]]           # 4-P3/8   TriFreq (lo=5, hi=3) + FCG
+
+  # ── Stage 3: P3 → P4 (medium objects) ──
+  - [-1, 1, Conv, [512, 3, 2]]                    # 5-P4/16  Downsample
+  - [-1, 2, C3k2_PrismV2, [512, False]]           # 6-P4/16  TriFreq + FCG
+
+  # ── Stage 4: P4 → P5 (large objects) ──
+  - [-1, 1, Conv, [1024, 3, 2]]                   # 7-P5/32  Downsample
+  - [-1, 2, C3k2_PrismV2, [1024, True]]           # 8-P5/32  c3k=True (lo=7, hi=5)
+
+  - [-1, 1, SPPF, [1024, 5]]                      # 9-P5/32  Spatial Pyramid Pooling
+
+head:
+  # ════════════════════ FPN: Top-Down Pathway (Prism fusion) ════════════════════
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]        # 10 Upsample P5→P4
+  - [[-1, 6], 1, Concat, [1]]                          # 11 Concat với backbone P4
+  - [-1, 2, PrismV2CSP, [512, False]]                  # 12 V2 fusion (TriFreq+FCG+AFR) cho P4
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]        # 13 Upsample P4→P3
+  - [[-1, 4], 1, Concat, [1]]                          # 14 Concat với backbone P3
+  - [-1, 2, PrismV2CSP, [256, False]]                  # 15 V2 fusion cho P3 (small obj)
+
+  # ════════════════════ PAN: Bottom-Up Pathway (C3k2 thường để tăng tốc) ════════════════════
+  - [-1, 1, Conv, [256, 3, 2]]                         # 16 Downsample P3→P4
+  - [[-1, 12], 1, Concat, [1]]                         # 17 Concat với FPN P4
+  - [-1, 2, C3k2, [512, False]]                        # 18 C3k2 tiêu chuẩn (nhanh hơn PrismCSP)
+
+  - [-1, 1, Conv, [512, 3, 2]]                         # 19 Downsample P4→P5
+  - [[-1, 9], 1, Concat, [1]]                          # 20 Concat với backbone P5
+  - [-1, 2, C3k2, [1024, True]]                        # 21 C3k2 tiêu chuẩn, c3k=True
+
+  # ════════════════════ Detection Head ════════════════════
+  - [[15, 18, 21], 1, Detect, [nc]]                    # 22 Detect(P3, P4, P5)

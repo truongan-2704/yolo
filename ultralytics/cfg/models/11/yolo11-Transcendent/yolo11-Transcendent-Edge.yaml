@@ -1,0 +1,62 @@
+# Ultralytics YOLO 🚀 — YOLO-Transcendent-Edge
+# =========================================================================
+# Mục tiêu: TẬP TRUNG VẬT THỂ NHỎ / edge deployment.
+# Đặc điểm:
+#   - Thêm head P2/4 (stride 4) → 4 detection scales (P2, P3, P4, P5)
+#   - Backbone Prism-v2 chỉ ở P3/P4 (không P5 vì objects small không cần)
+#   - Thay MSSO ở P5 bằng EnhancedSPPF (rẻ hơn, đủ dùng cho small-obj model)
+#     — nếu repo chưa có EnhancedSPPF fallback sang SPPF
+#   - Neck: RXG_Fuse + LiteFusion xen kẽ — tiết kiệm params
+#   - Bottom-up dừng ở P4 (không cần fuse lên P5 cho small-obj model)
+#
+# Use-case: PCB defect, drone footage, small foreign objects.
+
+nc: 80
+scales:
+  n: [0.50, 0.25, 1024]
+  s: [0.50, 0.50, 1024]
+  m: [0.67, 0.75, 768]
+  l: [1.00, 1.00, 512]
+
+backbone:
+  - [-1, 1, Conv,            [64, 3, 2]]           # 0  P1/2
+  - [-1, 1, Conv,            [128, 3, 2]]          # 1  P2/4 ← small-obj skip
+  - [-1, 2, C3k2_PrismV2,    [128, False]]         # 2  P2/4 tri-freq (quan trọng cho small)
+  - [-1, 1, Conv,            [256, 3, 2]]          # 3  P3/8
+  - [-1, 2, C3k2_PrismV2,    [256, False]]         # 4  P3/8 tri-freq
+  - [-1, 1, Conv,            [512, 3, 2]]          # 5  P4/16
+  - [-1, 2, C3k2_PrismV2,    [512, False]]         # 6  P4/16 tri-freq
+  - [-1, 1, Conv,            [1024, 3, 2]]         # 7  P5/32
+  - [-1, 2, C3k2,            [1024, True]]         # 8  P5/32 C3k2 chuẩn (lite)
+  - [-1, 1, SPPF,            [1024, 5]]            # 9  P5/32
+
+head:
+  # Refine các scale quan trọng cho small-obj
+  - [2, 1, AdaptiveFreqRefine, []]                 # 10 P2 refine
+  - [4, 1, AdaptiveFreqRefine, []]                 # 11 P3 refine
+  - [6, 1, AdaptiveFreqRefine, []]                 # 12 P4 refine
+
+  # Top-down P5 → P4 → P3 → P2
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]     # 13 up P5
+  - [[-1, 12], 1, LiteFusion, [512]]               # 14 (LiteFusion: cheap)
+  - [-1, 2, C3k2, [512, False, 0.25]]              # 15
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]     # 16 up P4
+  - [[-1, 11], 1, RXG_Fuse, [256]]                 # 17 (RXG: quan trọng cho P3)
+  - [-1, 2, PrismV2CSP, [256, False]]              # 18 ← P3 out
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]     # 19 up P3
+  - [[-1, 10], 1, RXG_Fuse, [128]]                 # 20 (RXG cho P2 → best small-obj)
+  - [-1, 2, PrismV2CSP, [128, False]]              # 21 ← P2 out (stride 4)
+
+  # Bottom-up P2 → P3 → P4 (không lên P5 — small-obj không cần)
+  - [-1, 1, Conv, [128, 3, 2]]                     # 22 down P2 → /8
+  - [[-1, 18], 1, LiteFusion, [256]]               # 23
+  - [-1, 2, C3k2, [256, False, 0.25]]              # 24 ← P3 out refined
+
+  - [-1, 1, Conv, [256, 3, 2]]                     # 25 down P3 → /16
+  - [[-1, 15], 1, LiteFusion, [512]]               # 26
+  - [-1, 2, C3k2, [512, False, 0.25]]              # 27 ← P4 out refined
+
+  # Detect 4 scales: P2(stride4), P3, P4, (giữ P5 từ backbone SPPF cho context lớn)
+  - [[21, 24, 27, 9], 1, Detect, [nc]]             # 28 Detect(P2,P3,P4,P5)
