@@ -1,0 +1,67 @@
+# YOLOv12 + ResNet50 backbone, AGPL-3.0 license
+# ------------------------------------------------------------------
+# Nghiên cứu gốc:
+#   - ResNet: He et al., "Deep Residual Learning for Image Recognition" (CVPR 2016).
+#   - YOLOv12: Area-Attention (A²) trong neck.
+#
+# Lý do thiết kế:
+#   - ResNet bottleneck (1×1 → 3×3 → 1×1 + skip) cực ổn định khi train với
+#     batch lớn / pretrain ImageNet — hợp deployment server GPU FP16.
+#   - Thêm SPPF + A2C2f ở P5 để bù global context (ResNet thuần không có).
+#   - Dùng Conv 1×1 "channel-align" để giảm 512/1024/2048 ch → 128/256/512 ch
+#     trước khi vào neck → giữ neck nhẹ, tránh blow-up tham số ở head.
+#
+# CẢNH BÁO: ResNetLayer trong tasks.py không nhân kênh theo width_multiple
+# → biến thể này CHỈ hỗ trợ scale 'l' (kênh cố định theo paper ResNet50).
+
+nc: 80
+
+scales:
+  # ResNetLayer kênh cố định, chỉ dùng scale 'l'
+  l: [1.00, 1.00, 1024]
+
+
+# ──────────────────────────── RESNET50 BACKBONE ────────────────────────────
+backbone:
+  # Theo công thức ResNet50:
+  #   stem(7×7 s2 + maxpool s2) → res2(64×4=256)/4 → res3(128×4=512)/8
+  #     → res4(256×4=1024)/16 → res5(512×4=2048)/32
+  - [-1, 1, ResNetLayer, [3,    64,  1, True,  1]]   # 0  stem  → 64ch, P2/4
+  - [-1, 1, ResNetLayer, [64,   64,  1, False, 3]]   # 1  res2  → 256ch, P2/4
+  - [-1, 1, ResNetLayer, [256,  128, 2, False, 4]]   # 2  res3  → 512ch,  P3/8   <== P3 OUT
+  - [-1, 1, ResNetLayer, [512,  256, 2, False, 6]]   # 3  res4  → 1024ch, P4/16  <== P4 OUT
+  - [-1, 1, ResNetLayer, [1024, 512, 2, False, 3]]   # 4  res5  → 2048ch, P5/32
+
+  # ---- Bổ trợ P5: SPPF + A2C2f toàn cục ----
+  - [-1, 1, SPPF,  [2048, 5]]                        # 5  P5/32
+  - [-1, 1, A2C2f, [2048, True, 1]]                  # 6  P5/32  <== P5 OUT
+
+
+# ──────────────────────────── PAN-A² NECK (channel-aligned) ────────────────────────────
+head:
+  # ---- Channel-align: rút 2048→512, 1024→256, 512→128 cho neck nhẹ ----
+  - [6, 1, Conv, [512, 1, 1]]                        # 7   P5 align (1024 sau width mul)
+  - [3, 1, Conv, [256, 1, 1]]                        # 8   P4 align
+  - [2, 1, Conv, [128, 1, 1]]                        # 9   P3 align
+
+  # ---- Top-down: P5 → P4 ----
+  - [7, 1, nn.Upsample, [None, 2, "nearest"]]        # 10
+  - [[-1, 8], 1, Concat, [1]]                        # 11  cat align-P4
+  - [-1, 2, A2C2f, [256, False, -1]]                 # 12
+
+  # ---- Top-down: P4 → P3 ----
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]       # 13
+  - [[-1, 9], 1, Concat, [1]]                        # 14  cat align-P3
+  - [-1, 2, A2C2f, [128, False, -1]]                 # 15  P3 OUT
+
+  # ---- Bottom-up: P3 → P4 ----
+  - [-1, 1, Conv, [128, 3, 2]]                       # 16
+  - [[-1, 12], 1, Concat, [1]]                       # 17  cat head P4
+  - [-1, 2, A2C2f, [256, False, -1]]                 # 18  P4 OUT
+
+  # ---- Bottom-up: P4 → P5 ----
+  - [-1, 1, Conv, [256, 3, 2]]                       # 19
+  - [[-1, 7], 1, Concat, [1]]                        # 20  cat align-P5
+  - [-1, 2, C3k2, [512, True]]                       # 21  P5 OUT
+
+  - [[15, 18, 21], 1, Detect, [nc]]                  # 22  Detect(P3, P4, P5)

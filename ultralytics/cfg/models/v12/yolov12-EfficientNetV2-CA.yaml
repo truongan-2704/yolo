@@ -1,0 +1,54 @@
+# YOLOv12 + EfficientNetV2 + CoordAttention (Pro), AGPL-3.0 license
+# Biến thể "Pro": chèn CoordAtt sau từng feature P3/P4/P5 trước khi đưa vào neck.
+# CoordAtt cực nhẹ (~0.05M params/level) nhưng cải thiện định vị vật thể nhỏ-trung.
+
+nc: 80
+
+scales:
+  n: [0.50, 0.25, 1024]
+  s: [0.50, 0.50, 1024]
+  m: [0.50, 1.00, 512]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.50, 512]
+
+
+backbone:
+  - [-1, 1, Conv, [64, 3, 2]]                 # 0-P1/2
+  - [-1, 1, FusedMBConv, [64, 1, 1]]          # 1-P1/2
+  - [-1, 2, FusedMBConv, [128, 2, 4]]         # 2-P2/4
+  - [-1, 2, FusedMBConv, [256, 2, 4]]         # 3-P3/8
+  - [-1, 1, CoordAtt,    [256]]               # 4   CA refine P3
+  - [-1, 3, MBConv,      [512, 2, 4]]         # 5-P4/16
+  - [-1, 2, MBConv,      [512, 1, 4]]         # 6-P4/16
+  - [-1, 1, CoordAtt,    [512]]               # 7   CA refine P4
+  - [-1, 2, MBConv,      [1024, 2, 5]]        # 8-P5/32
+  - [-1, 1, SPPF,        [1024, 5]]           # 9-P5/32
+  - [-1, 1, A2C2f,       [1024, True, 1]]     # 10-P5/32
+  - [-1, 1, CoordAtt,    [1024]]              # 11  CA refine P5
+
+
+head:
+  # ---------- Top-down: P5 → P4 ----------
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 12
+  - [[-1, 7], 1, Concat, [1]]                    # 13  cat backbone P4 (layer 7 = CA-P4)
+  - [-1, 2, A2C2f, [512, False, -1]]             # 14
+
+  # ---------- Top-down: P4 → P3 ----------
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 15
+  - [[-1, 4], 1, Concat, [1]]                    # 16  cat backbone P3 (layer 4 = CA-P3)
+  - [-1, 2, A2C2f, [256, False, -1]]             # 17
+  - [-1, 1, SimAM, [256]]                        # 18  SimAM (0 params) tinh chỉnh P3-OUT
+
+  # ---------- Bottom-up: P3 → P4 ----------
+  - [-1, 1, Conv, [256, 3, 2]]                   # 19
+  - [[-1, 14], 1, Concat, [1]]                   # 20  cat head P4 = layer 14
+  - [-1, 2, A2C2f, [512, False, -1]]             # 21
+  - [-1, 1, SimAM, [512]]                        # 22  P4-OUT refine
+
+  # ---------- Bottom-up: P4 → P5 ----------
+  - [-1, 1, Conv, [512, 3, 2]]                   # 23
+  - [[-1, 11], 1, Concat, [1]]                   # 24  cat backbone P5 = layer 11 (CA-P5)
+  - [-1, 2, C3k2, [1024, True]]                  # 25  P5-OUT
+
+  # ---------- Detect ----------
+  - [[18, 22, 25], 1, Detect, [nc]]              # 26  Detect(P3, P4, P5)

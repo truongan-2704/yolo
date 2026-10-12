@@ -102,6 +102,13 @@ from .SHSA import SHSA
 
 from .EfficientNetV2 import MBConv,FusedMBConv, SE
 
+from .gsstar_blocks import GSStarBlock, GSStarCSP, GSStarUnit, GhostUnit, StarLite
+
+from .c3k2_titan_blocks import (
+    C3k2_Titan, C3k_Titan, TitanBottleneck,
+    PartialConv3x3, RepMultiKernelDW, StarOp, EMALite,
+)
+
 from .EfficientNetV2_v2 import MBConvV2, FusedMBConvV2, SEv2, FeatureAlign
 
 from .EfficientNetV4 import MBConvV4, FusedMBConvV4, CASE, MKDWConv, LayerScale, FeatureAlignV4
@@ -381,4 +388,16 @@ __all__ = (
     "MSSO",
     "DMC_Block",
     "RXG_Fuse",
+    "GSStarBlock",
+    "GSStarCSP",
+    "GSStarUnit",
+    "GhostUnit",
+    "StarLite",
+    "C3k2_Titan",
+    "C3k_Titan",
+    "TitanBottleneck",
+    "PartialConv3x3",
+    "RepMultiKernelDW",
+    "StarOp",
+    "EMALite",
 )

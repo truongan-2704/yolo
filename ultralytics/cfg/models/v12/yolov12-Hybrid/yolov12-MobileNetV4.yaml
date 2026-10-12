@@ -1,0 +1,75 @@
+# YOLOv12 + MobileNetV4 backbone, AGPL-3.0 license
+# ------------------------------------------------------------------
+# Nghiên cứu gốc:
+#   - MobileNetV4: "MobileNetV4 — Universal Models for the Mobile Ecosystem"
+#     (Qin et al., Google, 2024). Đề xuất Universal Inverted Bottleneck (UIB)
+#     và Mobile MQA (Multi-Query Attention) — Pareto-optimal trên CPU/GPU/NPU.
+#   - YOLOv12 (2025): Area-Attention (A²) ở P4/P5.
+#
+# Kiến trúc hybrid:
+#   - Stage đầu (P1→P3): MNV4Conv = Fused-IB — nhanh trên mọi phần cứng.
+#   - Stage giữa (P4): MNV4UIB (Extra-DW 3×3 + 5×5) — biểu diễn spatial
+#     phong phú ở 2 độ sâu kênh khác nhau.
+#   - Stage sâu nhất (P5): MNV4Hybrid (UIB + Mobile-MQA) — chèn MQA để
+#     có global context, rất phù hợp với nhiệm vụ detect đa tỷ lệ.
+#   - Neck YOLOv12 (A2C2f) được GIỮ NGUYÊN — tận dụng Area-Attention tại
+#     các mức fusion, bù cho việc MNV4 chủ yếu dùng conv.
+#
+# Mục tiêu: nhẹ hơn YOLOv12n, giữ/tăng mAP nhờ MQA + A², triển khai tốt
+# trên mobile NPU / edge server GPU.
+
+nc: 80
+
+scales:
+  n: [0.50, 0.25, 1024]
+  s: [0.50, 0.50, 1024]
+  m: [0.50, 1.00, 512]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.50, 512]
+
+
+# ──────────────────────────── MOBILENETV4 BACKBONE ────────────────────────────
+backbone:
+  # [from, repeats, module, args]
+  - [-1, 1, Conv,        [32, 3, 2]]        # 0-P1/2    stem
+
+  # ---- Stage P2/4: Fused-IB (MNV4Conv) expand=4 ----
+  - [-1, 2, MNV4Conv,    [64, 2, 4]]        # 1-P2/4
+
+  # ---- Stage P3/8: Fused-IB expand=4 ----
+  - [-1, 2, MNV4Conv,    [128, 2, 4]]       # 2-P3/8    <== P3 OUT
+
+  # ---- Stage P4/16: UIB Extra-DW (3×3 + 5×5) expand=4 ----
+  - [-1, 4, MNV4UIB,     [256, 2, 4]]       # 3-P4/16   <== P4 OUT
+
+  # ---- Stage P5/32: UIB + Mobile-MQA hybrid, expand=6 ----
+  - [-1, 4, MNV4Hybrid,  [512, 2, 6]]       # 4-P5/32
+
+  # ---- Bổ trợ P5: SPPF + A2C2f toàn cục ----
+  - [-1, 1, SPPF,        [512, 5]]          # 5-P5/32
+  - [-1, 1, A2C2f,       [512, True, 1]]    # 6-P5/32   <== P5 OUT
+
+
+# ──────────────────────────── YOLOv12 PAN-A² NECK ────────────────────────────
+head:
+  # ---- Top-down: P5 → P4 ----
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 7
+  - [[-1, 3], 1, Concat, [1]]                    # 8   cat backbone P4 (layer 3)
+  - [-1, 2, A2C2f, [256, False, -1]]             # 9
+
+  # ---- Top-down: P4 → P3 ----
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 10
+  - [[-1, 2], 1, Concat, [1]]                    # 11  cat backbone P3 (layer 2)
+  - [-1, 2, A2C2f, [128, False, -1]]             # 12  P3 OUT
+
+  # ---- Bottom-up: P3 → P4 ----
+  - [-1, 1, Conv, [128, 3, 2]]                   # 13
+  - [[-1, 9], 1, Concat, [1]]                    # 14  cat head P4 (layer 9)
+  - [-1, 2, A2C2f, [256, False, -1]]             # 15  P4 OUT
+
+  # ---- Bottom-up: P4 → P5 ----
+  - [-1, 1, Conv, [256, 3, 2]]                   # 16
+  - [[-1, 6], 1, Concat, [1]]                    # 17  cat backbone P5 (layer 6)
+  - [-1, 2, C3k2, [512, True]]                   # 18  P5 OUT
+
+  - [[12, 15, 18], 1, Detect, [nc]]              # 19  Detect(P3, P4, P5)

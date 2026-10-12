@@ -1,0 +1,83 @@
+# Ultralytics YOLO 🚀, AGPL-3.0 license
+# YOLO11 + ViT-Swin Hybrid Backbone
+# =============================================
+# Kiến trúc lai kết hợp điểm mạnh của cả ViT và Swin Transformer:
+#
+# **Swin Transformer** (cho các stages resolution cao):
+#   - Window-based attention: O(n) complexity - hiệu quả tính toán
+#   - Shifted windows: cross-window connections không tốn thêm chi phí
+#   - Tốt cho local patterns và efficiency
+#
+# **ViT (Vision Transformer)** (cho các stages resolution thấp):
+#   - Global self-attention: O(n²) nhưng toàn cục hoàn toàn
+#   - Trường tiếp nhận không giới hạn
+#   - Tốt cho semantic features và global context
+#
+# **Chiến lược Hybrid**:
+#   P3 (80x80): SwinStage - efficient window attention cho resolution cao
+#   P4 early (40x40): SwinStage - tiếp tục local modeling
+#   P4 late (40x40): ViTStage - bắt đầu global attention
+#   P5 (20x20): ViTStage - full global context cho semantic reasoning
+#
+# Thiết kế này cân bằng tối ưu giữa:
+#   - Hiệu quả tính toán (Swin ở resolution cao)
+#   - Khả năng modeling toàn cục (ViT ở resolution thấp)
+#   - Local details + Global semantics
+
+nc: 80
+scales:
+  n: [0.50, 0.25, 1024]
+  s: [0.50, 0.50, 1024]
+  m: [0.50, 1.00, 512]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.50, 512]
+
+backbone:
+  # [from, repeats, module, args]
+  # ========== CONV STEM (P1-P2) ==========
+  # Conv stem cho low-level features hiệu quả
+  - [-1, 1, Conv, [64, 3, 2]]                    # 0-P1/2
+  - [-1, 1, Conv, [128, 3, 2]]                   # 1-P2/4
+  - [-1, 2, C3k2, [256, False, 0.25]]            # 2-P2/4
+
+  # ========== SWIN TRANSFORMER (P3) ==========
+  # P3 @ 80×80: Swin efficient cho resolution cao
+  - [-1, 2, SwinStage, [256, 2]]                 # 3-P3/8 (stride=2)
+
+  # ========== HYBRID TRANSITION (P4) ==========
+  # P4 early @ 40×40: Swin tiếp tục local modeling
+  - [-1, 2, SwinStage, [512, 2]]                 # 4-P4/16 (stride=2)
+
+  # P4 late @ 40×40: ViT bắt đầu global attention
+  - [-1, 2, ViTStage, [512, 1]]                  # 5-P4/16 (stride=1, refinement)
+
+  # ========== VIT TRANSFORMER (P5) ==========
+  # P5 @ 20×20: ViT full global context
+  - [-1, 2, ViTStage, [1024, 2]]                 # 6-P5/32 (stride=2)
+
+  # ========== GLOBAL CONTEXT AGGREGATION ==========
+  - [-1, 1, SPPF, [1024, 5]]                     # 7-P5/32
+  - [-1, 2, C2PSA, [1024]]                       # 8-P5/32
+
+# ========== YOLO11 STANDARD NECK/HEAD ==========
+head:
+  # -------- Top-down pathway (FPN) --------
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 9
+  - [[-1, 5], 1, Concat, [1]]                    # 10 cat backbone P4 (ViT layer 5)
+  - [-1, 2, C3k2, [512, False]]                  # 11
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 12
+  - [[-1, 3], 1, Concat, [1]]                    # 13 cat backbone P3 (Swin layer 3)
+  - [-1, 2, C3k2, [256, False]]                  # 14 (P3/8-small)
+
+  # -------- Bottom-up pathway (PAN) --------
+  - [-1, 1, Conv, [256, 3, 2]]                   # 15
+  - [[-1, 11], 1, Concat, [1]]                   # 16 cat head P4
+  - [-1, 2, C3k2, [512, False]]                  # 17 (P4/16-medium)
+
+  - [-1, 1, Conv, [512, 3, 2]]                   # 18
+  - [[-1, 8], 1, Concat, [1]]                    # 19 cat head P5
+  - [-1, 2, C3k2, [1024, True]]                  # 20 (P5/32-large)
+
+  # Detect heads at P3, P4, P5
+  - [[14, 17, 20], 1, Detect, [nc]]              # 21 Detect(P3, P4, P5)

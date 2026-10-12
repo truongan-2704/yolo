@@ -1,0 +1,78 @@
+# YOLOv12 + Ghost-MobileNetV4 tripartite hybrid, AGPL-3.0 license
+# ------------------------------------------------------------------
+# Tham khảo nghiên cứu:
+#   - GhostNet (Han et al., CVPR 2020) — cheap-op feature generation.
+#   - MobileNetV4 (Qin et al., 2024) — UIB Extra-DW, Mobile-MQA.
+#   - YOLOv12 (2025) — Area-Attention.
+#   - "Best-of-N hybrid backbones" trên COCO cho thấy phối hợp module
+#     theo từng độ sâu (early=fast, mid=expressive, deep=global) cho
+#     Pareto frontier tốt hơn backbone đồng nhất (Liu et al., 2023).
+#
+# Triết lý "tripartite":
+#   - Early stages (P1→P3): Ghost (cheap-op) — vì features early có
+#     redundancy cao (Han et al.) → cheap-op không mất AP.
+#   - Mid stage (P4): MNV4 UIB Extra-DW — ở tầng "mid-level" cần spatial
+#     diversity ở 2 độ sâu kênh → UIB mạnh hơn MBConv.
+#   - Deep stage (P5): MNV4Hybrid (UIB + Mobile-MQA) — global context.
+#   - Neck: A2C2f (YOLOv12) — Area-Attention bù attention cho mọi mức.
+#
+# Mục tiêu: nhẹ hơn YOLOv12n ~15-25% FLOPs, mAP tương đương hoặc cao hơn.
+
+nc: 80
+
+scales:
+  n: [0.50, 0.25, 1024]
+  s: [0.50, 0.50, 1024]
+  m: [0.50, 1.00, 512]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.50, 512]
+
+
+# ──────────────────────────── TRIPARTITE BACKBONE ────────────────────────────
+backbone:
+  # ---- Stem (Conv thường giữ low-level texture) ----
+  - [-1, 1, Conv,            [48, 3, 2]]         # 0-P1/2
+
+  # ---- Early P2/4: Ghost cheap-op ----
+  - [-1, 1, GhostConv,       [96, 3, 2]]         # 1-P2/4
+  - [-1, 2, GhostBottleneck, [96, 3, 1]]         # 2-P2/4
+
+  # ---- Early P3/8: Ghost ----
+  - [-1, 1, GhostConv,       [192, 3, 2]]        # 3-P3/8
+  - [-1, 2, GhostBottleneck, [192, 3, 1]]        # 4-P3/8   <== P3 OUT
+
+  # ---- Mid P4/16: MNV4 UIB Extra-DW (3×3 + 5×5) ----
+  - [-1, 4, MNV4UIB,         [384, 2, 4]]        # 5-P4/16  <== P4 OUT
+
+  # ---- Deep P5/32: MNV4 UIB + Mobile-MQA hybrid ----
+  - [-1, 4, MNV4Hybrid,      [768, 2, 6]]        # 6-P5/32
+
+  # ---- Bổ trợ P5: SPPF + A2C2f ----
+  - [-1, 1, SPPF,            [768, 5]]           # 7-P5/32
+  - [-1, 1, A2C2f,           [768, True, 1]]     # 8-P5/32  <== P5 OUT
+
+
+# ──────────────────────────── PAN-A² NECK ────────────────────────────
+head:
+  # ---- Top-down: P5 → P4 ----
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 9
+  - [[-1, 5], 1, Concat, [1]]                    # 10  cat backbone P4 (layer 5)
+  - [-1, 2, A2C2f, [384, False, -1]]             # 11
+
+  # ---- Top-down: P4 → P3 ----
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]   # 12
+  - [[-1, 4], 1, Concat, [1]]                    # 13  cat backbone P3 (layer 4)
+  - [-1, 2, A2C2f, [192, False, -1]]             # 14  P3 OUT
+  - [-1, 1, CoordAtt, [192]]                     # 15  CA refine P3 (cheap, +định vị)
+
+  # ---- Bottom-up: P3 → P4 (Ghost downsample) ----
+  - [-1, 1, GhostConv, [192, 3, 2]]              # 16
+  - [[-1, 11], 1, Concat, [1]]                   # 17  cat head P4 (layer 11)
+  - [-1, 2, A2C2f, [384, False, -1]]             # 18  P4 OUT
+
+  # ---- Bottom-up: P4 → P5 ----
+  - [-1, 1, GhostConv, [384, 3, 2]]              # 19
+  - [[-1, 8], 1, Concat, [1]]                    # 20  cat backbone P5 (layer 8)
+  - [-1, 2, C3k2, [768, True]]                   # 21  P5 OUT
+
+  - [[15, 18, 21], 1, Detect, [nc]]              # 22  Detect(P3, P4, P5)
