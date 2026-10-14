@@ -1,8 +1,8 @@
 
-BCCD DETECTION - v1 2023-03-09 11:30am
+Tanpa Augmentasi - v1 2025-12-23 4:57pm
 ==============================
 
-This dataset was exported via roboflow.com on December 20, 2025 at 4:10 PM GMT
+This dataset was exported via roboflow.com on December 23, 2025 at 10:00 AM GMT
 
 Roboflow is an end-to-end computer vision platform that helps you
 * collaborate with your team on computer vision projects
@@ -17,12 +17,11 @@ visit https://github.com/roboflow/notebooks
 
 To find over 100k other datasets and pre-trained models, visit https://universe.roboflow.com
 
-The dataset includes 874 images.
-Globulerouge are annotated in YOLOv11 format.
+The dataset includes 1175 images.
+Letters are annotated in YOLOv11 format.
 
 The following pre-processing was applied to each image:
-* Auto-orientation of pixel data (with EXIF-orientation stripping)
-* Resize to 640x640 (Stretch)
+* Resize to 1024x1024 (Stretch)
 
 No image augmentation techniques were applied.
 

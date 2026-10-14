@@ -1,5 +1,5 @@
-# BCCD DETECTION > 2023-03-09 11:30am
-https://universe.roboflow.com/insacvl/bccd-detection-p3ykq
+# Tanpa Augmentasi > 2025-12-23 4:57pm
+https://universe.roboflow.com/test-n78xb/tanpa-augmentasi-qfo3c
 
 Provided by a Roboflow user
 License: CC BY 4.0

@@ -2,12 +2,12 @@ train: ../train/images
 val: ../valid/images
 test: ../test/images
 
-nc: 3
-names: ['Platelets', 'RBC', 'WBC']
+nc: 9
+names: ['Basofil', 'Eosinofil', 'Eritrosit', 'Limfoblast', 'Limfosit', 'Monosit', 'Myeoblast', 'Neutrofil', 'Platelet']
 
 roboflow:
-  workspace: insacvl
-  project: bccd-detection-p3ykq
+  workspace: test-n78xb
+  project: tanpa-augmentasi-qfo3c
   version: 1
   license: CC BY 4.0
-  url: https://universe.roboflow.com/insacvl/bccd-detection-p3ykq/dataset/1
+  url: https://universe.roboflow.com/test-n78xb/tanpa-augmentasi-qfo3c/dataset/1
