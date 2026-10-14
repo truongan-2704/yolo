@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 3
+names: ['Platelets', 'RBC', 'WBC']
+
+roboflow:
+  workspace: insacvl
+  project: bccd-detection-p3ykq
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/insacvl/bccd-detection-p3ykq/dataset/1
