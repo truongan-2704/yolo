@@ -54,7 +54,7 @@
 nc: 80
 scales:
   # [depth_mul, width_mul, max_channels]
-#  n: [0.50, 0.25, 1024]    # Prism-n: ~1.1M params, edge deployment
+  n: [0.50, 0.25, 1024]    # Prism-n: ~1.9M params, edge deployment
   s: [0.50, 0.50, 1024]    # Prism-s: ~3.0M params, balanced
   m: [0.50, 1.00, 512]     # Prism-m: ~8.0M params, standard
   l: [1.00, 1.00, 512]     # Prism-l: ~14M params, accurate

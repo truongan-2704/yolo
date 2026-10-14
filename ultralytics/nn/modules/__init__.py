@@ -73,6 +73,24 @@ from .nexus_blocks import OmniDirConv, NormRatioGate, NexusBottleneck, C3k2_Nexu
 
 from .prism_blocks import DualFreqConv, MomentContrastGate, PrismBottleneck, C3k2_Prism, PrismCSP, FreqSpatialRefine
 
+from .prism_ablation_blocks import (
+    StandardDWConv,
+    DualFreqConv_NoHP,
+    PrismAblationBottleneck,
+    C3k2_Prism_Base,
+    PrismCSP_Base,
+    C3k2_Prism_DFDC,
+    PrismCSP_DFDC,
+    C3k2_Prism_MCG,
+    PrismCSP_MCG,
+    PrismCSP_FASR,
+    PrismCSP_NoFASR,
+    PrismCSP_DFDC_FASR,
+    PrismCSP_MCG_FASR,
+    C3k2_Prism_NoHP,
+    PrismCSP_NoHP,
+)
+
 from .prism_v2_blocks import TriFreqConv, FreqContrastGate, PrismV2Bottleneck, C3k2_PrismV2, PrismV2CSP, AdaptiveFreqRefine
 
 from .zenith_blocks import WaveletConv, TopologicalGate, ZenithBottleneck, C3k2_Zenith, ZenithCSP, AdaptiveScaleRouter
@@ -332,6 +350,21 @@ __all__ = (
     "C3k2_Prism",
     "PrismCSP",
     "FreqSpatialRefine",
+    "StandardDWConv",
+    "DualFreqConv_NoHP",
+    "PrismAblationBottleneck",
+    "C3k2_Prism_Base",
+    "PrismCSP_Base",
+    "C3k2_Prism_DFDC",
+    "PrismCSP_DFDC",
+    "C3k2_Prism_MCG",
+    "PrismCSP_MCG",
+    "PrismCSP_FASR",
+    "PrismCSP_NoFASR",
+    "PrismCSP_DFDC_FASR",
+    "PrismCSP_MCG_FASR",
+    "C3k2_Prism_NoHP",
+    "PrismCSP_NoHP",
     "MNV4ProConv",
     "MNV4ProUIB",
     "MNV4ProHybrid",
