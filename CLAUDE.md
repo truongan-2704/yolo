@@ -8,7 +8,7 @@ This is a YOLO research sandbox: a vendored copy of the Ultralytics repo (`ultra
 
 ## Environment
 
-- Python with dependencies pinned in `requirements.txt` (torch 2.2.2, torchvision 0.17.2, timm 1.0.22, numpy 1.26.4, opencv-python 4.9, albumentations 2.0.4, onnx/onnxruntime, supervision, einops, …). Install with `pip install -r requirements.txt`.
+- Python 3.12+ with dependencies in `requirements.txt` (torch >= 2.7.0 with CUDA 12.8 for RTX 5090 sm_120 support, torchvision >= 0.22.0, timm >= 1.0.0, numpy >= 1.26.4, opencv-python >= 4.9.0, albumentations >= 1.4.15, onnxruntime-gpu, supervision, einops, …). Install with `pip install -r requirements.txt`.
 - No package install step — scripts at the repo root import the vendored `ultralytics/` package directly (`from ultralytics import YOLO`). Run everything from the repo root so that import path resolves.
 - There is no `setup.py`/`pyproject.toml`, no lint config, and no pytest suite. The `test_*.py` files are smoke-test scripts, not pytest tests — run them with `python test_xxx.py`.
 

@@ -68,12 +68,12 @@ def parse_requirements(file_path=ROOT.parent / "requirements.txt", package=""):
     if package:
         requires = [x for x in metadata.distribution(package).requires if "extra == " not in x]
     else:
-        requires = Path(file_path).read_text().splitlines()
+        requires = Path(file_path).read_text(encoding="utf-8", errors="ignore").splitlines()
 
     requirements = []
     for line in requires:
         line = line.strip()
-        if line and not line.startswith("#"):
+        if line and not line.startswith(("#", "-")):
             line = line.split("#")[0].strip()  # ignore inline comments
             if match := re.match(r"([a-zA-Z0-9-_]+)\s*([<>!=~]+.*)?", line):
                 requirements.append(SimpleNamespace(name=match[1], specifier=match[2].strip() if match[2] else ""))

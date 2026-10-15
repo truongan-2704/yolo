@@ -1,6 +1,6 @@
-train: ../train/images
-val: ../valid/images
-test: ../test/images
+train: train/images
+val: valid/images
+test: test/images
 
 nc: 9
 names: ['Basofil', 'Eosinofil', 'Eritrosit', 'Limfoblast', 'Limfosit', 'Monosit', 'Myeoblast', 'Neutrofil', 'Platelet']
